@@ -1,0 +1,64 @@
+known_api_adapters:
+  gdelt:
+    domains:
+      - gdeltproject.org
+    strategy: api_first
+    adapter: gdelt_collector
+    endpoint_hint: https://api.gdeltproject.org/api/v2/doc/doc
+
+  openalex:
+    domains:
+      - openalex.org
+      - api.openalex.org
+    strategy: api_first
+    adapter: openalex_collector
+    endpoint_hint: https://api.openalex.org/
+
+  arxiv:
+    domains:
+      - arxiv.org
+    strategy: api_first
+    adapter: arxiv_collector
+    endpoint_hint: http://export.arxiv.org/api/query
+
+  sec:
+    domains:
+      - sec.gov
+    strategy: api_first
+    adapter: sec_edgar_collector
+    endpoint_hint: https://www.sec.gov/about/developer-resources
+
+  world_bank:
+    domains:
+      - worldbank.org
+      - data.worldbank.org
+    strategy: api_first
+    adapter: world_bank_collector
+
+  pubmed:
+    domains:
+      - ncbi.nlm.nih.gov
+      - pubmed.ncbi.nlm.nih.gov
+    strategy: api_first
+    adapter: pubmed_collector
+
+  github:
+    domains:
+      - github.com
+      - api.github.com
+    strategy: api_first
+    adapter: github_collector
+
+  crossref:
+    domains:
+      - crossref.org
+      - api.crossref.org
+    strategy: api_first
+    adapter: crossref_collector
+    endpoint_hint: https://api.crossref.org/
+
+  semantic_scholar:
+    domains:
+      - semanticscholar.org
+    strategy: api_first
+    adapter: semantic_scholar_collector

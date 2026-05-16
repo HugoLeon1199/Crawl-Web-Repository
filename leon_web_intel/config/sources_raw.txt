@@ -1,0 +1,8 @@
+# Leon Global Web Intelligence — seed sources (add up to ~200 lines)
+https://www.bbc.com/news
+https://vnexpress.net/
+https://www.sec.gov/
+https://openalex.org/
+https://www.gdeltproject.org/
+https://www.koreaherald.com/
+https://www.channelnewsasia.com/
