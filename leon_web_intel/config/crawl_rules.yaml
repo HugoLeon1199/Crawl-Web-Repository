@@ -1,4 +1,4 @@
-user_agent: "LeonWebIntelBot/0.1 (+local research project; contact: none)"
+user_agent: "LeonWebIntelBot/0.1 (+local research project)"
 request_timeout_seconds: 20
 max_retries: 2
 default_delay_seconds: 1.5

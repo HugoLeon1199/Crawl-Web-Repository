@@ -16,7 +16,7 @@ class JsDetectionConfig(BaseModel):
 
 
 class CrawlRules(BaseModel):
-    user_agent: str = "LeonWebIntelBot/0.1"
+    user_agent: str = "LeonWebIntelBot/0.1 (+local research project)"
     request_timeout_seconds: float = 20.0
     max_retries: int = 2
     default_delay_seconds: float = 1.5

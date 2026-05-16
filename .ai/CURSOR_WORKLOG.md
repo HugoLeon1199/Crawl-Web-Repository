@@ -1,66 +1,83 @@
-# Cursor Worklog
+# CURSOR_WORKLOG — shared worklog
 
-This is the only shared AI workflow file in this repository.
+**Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
+**Project:** Leon Global Web Intelligence Engine  
 
-Cursor should update this file after every meaningful code change so Leon, ChatGPT, and Gemini can quickly understand what changed.
+Single shared AI workflow file — Leon, ChatGPT, Gemini ↔ Cursor.  
+Do **not** spawn parallel long workflow docs; this file + code/comments carry intent.
 
-## Latest Update
+---
 
-Date:
-Branch:
-Task:
-Status:
+## Current session (2026-05-16) — auto Git sync policy + push
 
-## What Cursor Changed
+### Current task
 
-### Files Created
+Leon: Cursor **tự cập nhật worklog** sau khi sửa và **commit + push** lên GitHub **không cần nhắc**. Resolve merge với stub worklog cũ trên remote; giữ nội dung chi tiết + rule auto-push.
 
--
+### Files created
 
-### Files Modified
+- *(remote đã có `.ai/` stub template — đã merge/replace bằng nội dung đầy đủ bên dưới)*
 
--
+### Files modified
 
-### Files Deleted
+- `.cursor/rules/cursor-worklog.mdc` — **commit + push** sau thay đổi có ý nghĩa (trừ khi Leon nói không push).
+- `.ai/CURSOR_WORKLOG.md` — merge conflict resolved (stub GitHub ↔ bản chi tiết Cursor).
+- `leon_web_intel/config/crawl_rules.yaml` — `user_agent` = `LeonWebIntelBot/0.1 (+local research project)`.
+- `leon_web_intel/src/settings.py` — fallback `user_agent` khớp charter.
 
--
+### Files deleted
 
-## What Was Implemented
+- *(none)*
 
--
+### What was implemented
 
-## How To Run
+- Chính sách **tự động đẩy GitHub** sau chỉnh sửa đáng kể (rule + worklog).
+- `git pull --rebase` + resolve **add/add** conflict trên `CURSOR_WORKLOG.md`.
+
+### How to run
 
 ```bash
-[commands]
+cd leon_web_intel
+python run_profile.py --input config/sources_raw.txt --dry-run
 ```
 
-## How To Test
+### How to test
 
 ```bash
-[commands]
+cd leon_web_intel
+python -m pytest
 ```
 
-## Test Result
+### Test result
 
--
+- **Not run** in this Cursor turn.
 
-## Known Issues
+### Known issues
 
--
+- None specific to this Git/policy update.
 
-## Risks
+### Risks
 
--
+- Auto-push cần credential local OK; nên có branch protection nếu team lớn.
 
-## Notes For ChatGPT Review
+### Notes for ChatGPT review
 
--
+- Agent-initiated pushes — confirm policy with Leon; PR-only workflow alternative.
 
-## Notes For Gemini Review
+### Notes for Gemini review
 
--
+- Optional `pre-push` pytest hook later.
 
-## Next Suggested Step
+### Next suggested step
 
--
+- `pytest` + `profile-only --limit 10` sau khi pull.
+
+---
+
+## Archive — charter alignment (2026-05-16)
+
+- Inspect Tầng 0–11 vs `leon_web_intel/`; mapping charter ↔ code — xem git history (`0625a30` era / earlier commits).
+
+## Archive — rules bootstrap
+
+- Khởi tạo `.cursor/rules/cursor-worklog.mdc` và worklog.

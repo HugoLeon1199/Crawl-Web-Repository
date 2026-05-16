@@ -1,0 +1,42 @@
+---
+description: Shared worklog discipline + safe change practices for Crawl-Web-Repository
+alwaysApply: true
+---
+
+# Worklog & workflow
+
+## Before editing
+
+- Inspect the repo (structure, existing patterns, related files) before changing code.
+- Keep edits **small, safe, and testable**; do not rewrite unrelated code.
+
+## After every meaningful code change
+
+Update **only** `.ai/CURSOR_WORKLOG.md` (the single shared worklog). Append or replace the **Current session** section so it stays accurate—do not maintain parallel logs elsewhere.
+
+### `CURSOR_WORKLOG.md` must include
+
+1. **Current task** — what you are doing now / just finished  
+2. **Files created**  
+3. **Files modified**  
+4. **Files deleted**  
+5. **What was implemented** — concise, factual  
+6. **How to run** — commands/paths (no private machine-specific paths)  
+7. **How to test**  
+8. **Test result** — e.g. passed / not run / blocked (say why)  
+9. **Known issues**  
+10. **Risks**  
+11. **Notes for ChatGPT review**  
+12. **Notes for Gemini review**  
+13. **Next suggested step**
+
+## Safety & compliance
+
+- Do **not** hardcode secrets, API keys, tokens, or private/local paths.
+- Do **not** bypass CAPTCHA, paywall, login, access control, robots restrictions, or platform policy (align with project crawl ethics).
+
+## Git
+
+- After **meaningful** code/config/doc updates in this repo: **commit** and **push** to `origin` so GitHub stays current—**no separate ping needed** from Leon.
+- Commit messages: short, factual (what/why). Do **not** commit secrets (`.env`, keys, tokens).
+- If a change is **draft/local-only** or Leon explicitly says “no push”, skip push for that turn only.
