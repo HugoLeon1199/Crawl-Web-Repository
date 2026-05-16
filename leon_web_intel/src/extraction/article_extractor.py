@@ -131,6 +131,22 @@ def extract_article(
     login_detected = any(k.lower() in lower for k in rules.login_keywords)
     captcha_detected = any(k.lower() in lower for k in rules.captcha_keywords)
 
+    if paywall_detected or login_detected or captcha_detected:
+        return ArticleResult(
+            url=url,
+            title=None,
+            published_at=None,
+            content=None,
+            content_length=0,
+            content_hash="",
+            language=None,
+            raw_path="",
+            extract_ok=False,
+            paywall_detected=paywall_detected,
+            login_detected=login_detected,
+            captcha_detected=captcha_detected,
+        )
+
     raw_path = raw_store.save_html(source_id, html.encode("utf-8"))
 
     meta = trafilatura.extract_metadata(html)

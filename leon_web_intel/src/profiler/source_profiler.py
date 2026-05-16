@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 from tqdm.auto import tqdm
 
 from profiler.api_detector import detect_known_api
-from profiler.html_probe import run_html_probe
+from profiler.html_probe import HTMLProbeResult, run_html_probe
 from profiler.js_detector import detect_js_heavy
 from profiler.normalize import NormalizedSource, dedupe_sources, normalize_url
 from profiler.paywall_detector import detect_paywall_signals
@@ -37,6 +37,7 @@ class SourceProfile(BaseModel):
     robots_ok: bool = True
     robots_sitemaps: list[str] = Field(default_factory=list)
     robots_disallow_detected: bool = False
+    robots_can_fetch_homepage: bool = True
     has_known_api: bool = False
     known_api_adapter: str | None = None
     known_api_endpoint_hint: str | None = None
@@ -112,6 +113,33 @@ def decide_best_strategy(profile: SourceProfile, rules: CrawlRules) -> SourcePro
     return profile
 
 
+def apply_robots_homepage_governance(profile: SourceProfile) -> str | None:
+    """
+    If robots.txt disallows our User-Agent from the homepage, never keep HTML/Playwright
+    crawl strategies; downgrade and return a message for crawl_errors / error_message.
+    """
+    if profile.robots_can_fetch_homepage:
+        return None
+    blocked = {"html_then_trafilatura", "playwright_fallback"}
+    if profile.best_strategy not in blocked:
+        return None
+    prev = profile.best_strategy
+    has_meta = bool(
+        (profile.html_title or "").strip()
+        or profile.sample_extracted_text_length > 0
+        or profile.html_text_length > 0
+    )
+    profile.best_strategy = "metadata_only" if has_meta else "manual_review"
+    profile.status = "review"
+    profile.tos_risk = "high"
+    msg = (
+        f"robots.txt disallows User-Agent from fetching homepage ({profile.homepage_url}); "
+        f"removed strategy {prev} → {profile.best_strategy}"
+    )
+    profile.error_message = (profile.error_message + " | " if profile.error_message else "") + msg
+    return msg
+
+
 def apply_commercial_governance(profile: SourceProfile, rules: CrawlRules) -> None:
     domain = profile.domain.lower()
     risky = [d.lower() for d in rules.prefer_metadata_only_domains]
@@ -135,6 +163,7 @@ def profile_to_db_row(profile: SourceProfile) -> dict[str, Any]:
         "robots_ok": profile.robots_ok,
         "robots_sitemaps": json.dumps(profile.robots_sitemaps),
         "robots_disallow_detected": profile.robots_disallow_detected,
+        "robots_can_fetch_homepage": profile.robots_can_fetch_homepage,
         "has_known_api": profile.has_known_api,
         "known_api_adapter": profile.known_api_adapter,
         "known_api_endpoint_hint": profile.known_api_endpoint_hint,
@@ -216,12 +245,16 @@ class SourceProfiler:
             profile.robots_ok = robots.robots_ok
             profile.robots_sitemaps = robots.robots_sitemaps
             profile.robots_disallow_detected = robots.robots_disallow_detected
+            profile.robots_can_fetch_homepage = robots.can_fetch_homepage
 
             homepage_url = norm.homepage_url
-            try:
-                hp_status, homepage_html = self._fetch_text(homepage_url)
-            except Exception:
-                hp_status, homepage_html = 0, ""
+            if robots.can_fetch_homepage:
+                try:
+                    hp_status, homepage_html = self._fetch_text(homepage_url)
+                except Exception:
+                    hp_status, homepage_html = 0, ""
+            else:
+                hp_status, homepage_html = 403, ""
 
             rss_urls, rss_valid = discover_rss_urls(
                 norm,
@@ -244,7 +277,21 @@ class SourceProfiler:
             profile.sitemap_url_count = sm_count
             profile.has_sitemap = sm_count > 0
 
-            probe = run_html_probe(norm, homepage_url, self.rules, self._fetch_text, self.raw_store)
+            if robots.can_fetch_homepage:
+                probe = run_html_probe(norm, homepage_url, self.rules, self._fetch_text, self.raw_store)
+            else:
+                probe = HTMLProbeResult(
+                    status_code=403,
+                    html_title="",
+                    html_text_length=0,
+                    html_link_count=0,
+                    script_count=0,
+                    html_extract_ok=False,
+                    sample_extracted_text_length=0,
+                    raw_path="",
+                    raw_html="",
+                )
+
             profile.html_status_code = probe.status_code
             profile.html_title = probe.html_title
             profile.html_text_length = probe.html_text_length
@@ -260,6 +307,20 @@ class SourceProfiler:
             profile.captcha_detected = pay.captcha_detected
 
             profile = decide_best_strategy(profile, self.rules)
+
+            gov_msg = apply_robots_homepage_governance(profile)
+            if gov_msg:
+                self.db.insert_crawl_error(
+                    {
+                        "id": new_id(),
+                        "source_id": profile.source_id,
+                        "url": profile.homepage_url or profile.normalized_url or "",
+                        "stage": "profile",
+                        "error_type": "RobotsDisallowHomepage",
+                        "error_message": gov_msg,
+                        "created_at": utc_now(),
+                    }
+                )
 
             logger.info(
                 "[PROFILE] {} | api={} | rss={} | sitemap={} | html_ok={} | js={} | strategy={}",

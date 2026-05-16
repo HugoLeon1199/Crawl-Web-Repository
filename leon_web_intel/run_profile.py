@@ -25,6 +25,7 @@ from collectors.sitemap_collector import discover_from_sitemap  # noqa: E402
 from extraction.article_extractor import compute_quality_score, extract_article  # noqa: E402
 from extraction.metadata_extractor import extract_meta_description  # noqa: E402
 from profiler.normalize import dedupe_sources, normalize_url  # noqa: E402
+from profiler.paywall_detector import detect_paywall_signals  # noqa: E402
 from profiler.source_profiler import SourceProfiler  # noqa: E402
 from reporting.profile_report import console_strategy_counts, write_profile_summary  # noqa: E402
 from settings import load_crawl_rules, load_known_api_config  # noqa: E402
@@ -102,13 +103,14 @@ def print_profile_summary(db: WebIntelDB) -> None:
 
 
 def existing_hashes(db: WebIntelDB) -> set[str]:
-    try:
-        res = db.conn.execute(
-            "SELECT DISTINCT content_hash FROM articles WHERE content_hash IS NOT NULL AND content_hash <> ''"
-        ).fetchall()
-        return {r[0] for r in res}
-    except Exception:
-        return set()
+    return db.fetch_distinct_content_hashes()
+
+
+def robots_allows_homepage_row(row: dict) -> bool:
+    v = row.get("robots_can_fetch_homepage")
+    if v is None:
+        return True
+    return bool(v)
 
 
 def crawl_samples(
@@ -160,7 +162,7 @@ def crawl_samples(
                     title = row.get("html_title") or ""
                     url = row.get("homepage_url") or row.get("normalized_url") or ""
                     desc = ""
-                    if url:
+                    if url and robots_allows_homepage_row(row):
                         st, html = fetch_text(url)
                         if st < 400:
                             desc = extract_meta_description(html) or ""
@@ -237,6 +239,19 @@ def crawl_samples(
                         )
 
                 elif strategy == "html_then_trafilatura":
+                    if not robots_allows_homepage_row(row):
+                        db.insert_crawl_error(
+                            {
+                                "id": new_id(),
+                                "source_id": sid,
+                                "url": row.get("homepage_url") or "",
+                                "stage": "sample_crawl",
+                                "error_type": "RobotsDisallowHomepage",
+                                "error_message": "Skipping HTML link crawl: robots disallow homepage fetch",
+                                "created_at": utc_now(),
+                            }
+                        )
+                        continue
                     hp = row.get("homepage_url") or row.get("normalized_url") or ""
                     if hp:
                         st, html = fetch_text(hp)
@@ -252,6 +267,19 @@ def crawl_samples(
                             )
 
                 elif strategy == "playwright_fallback":
+                    if not robots_allows_homepage_row(row):
+                        db.insert_crawl_error(
+                            {
+                                "id": new_id(),
+                                "source_id": sid,
+                                "url": row.get("homepage_url") or "",
+                                "stage": "sample_crawl",
+                                "error_type": "RobotsDisallowHomepage",
+                                "error_message": "Skipping Playwright: robots disallow homepage fetch",
+                                "created_at": utc_now(),
+                            }
+                        )
+                        continue
                     if not with_playwright:
                         db.insert_crawl_error(
                             {
@@ -268,6 +296,20 @@ def crawl_samples(
                     hp = row.get("homepage_url") or row.get("normalized_url") or ""
                     rendered = fetch_rendered_html(hp) if hp else None
                     if not rendered:
+                        continue
+                    pay = detect_paywall_signals(rendered, rules)
+                    if pay.paywall_detected or pay.login_detected or pay.captcha_detected:
+                        db.insert_crawl_error(
+                            {
+                                "id": new_id(),
+                                "source_id": sid,
+                                "url": hp,
+                                "stage": "extract",
+                                "error_type": "AccessControlDetected",
+                                "error_message": f"paywall={pay.paywall_detected} login={pay.login_detected} captcha={pay.captcha_detected}",
+                                "created_at": utc_now(),
+                            }
+                        )
                         continue
                     try:
                         import trafilatura
@@ -331,6 +373,21 @@ def crawl_samples(
                         raw_store=raw_store,
                         client=client,
                     )
+                    if art.paywall_detected or art.login_detected or art.captcha_detected:
+                        db.insert_crawl_error(
+                            {
+                                "id": new_id(),
+                                "source_id": sid,
+                                "url": url,
+                                "stage": "extract",
+                                "error_type": "AccessControlDetected",
+                                "error_message": (
+                                    f"paywall={art.paywall_detected} login={art.login_detected} captcha={art.captcha_detected}"
+                                ),
+                                "created_at": utc_now(),
+                            }
+                        )
+                        continue
                     if strategy != "metadata_only" and art.content_length < rules.min_article_content_length:
                         db.insert_crawl_error(
                             {

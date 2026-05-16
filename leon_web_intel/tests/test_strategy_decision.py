@@ -1,4 +1,8 @@
-from profiler.source_profiler import SourceProfile, decide_best_strategy
+from profiler.source_profiler import (
+    SourceProfile,
+    apply_robots_homepage_governance,
+    decide_best_strategy,
+)
 from settings import CrawlRules
 
 
@@ -48,3 +52,43 @@ def test_strategy_paywall_gate():
     )
     decide_best_strategy(p, rules())
     assert p.best_strategy == "metadata_only"
+
+
+def test_robots_downgrades_html_strategy():
+    p = SourceProfile(
+        robots_can_fetch_homepage=False,
+        homepage_url="https://example.com/",
+        html_status_code=200,
+        html_extract_ok=True,
+        js_required=False,
+    )
+    decide_best_strategy(p, rules())
+    assert p.best_strategy == "html_then_trafilatura"
+    msg = apply_robots_homepage_governance(p)
+    assert msg is not None
+    assert "robots.txt disallows" in msg
+    assert p.best_strategy == "manual_review"
+
+
+def test_robots_downgrades_playwright():
+    p = SourceProfile(
+        robots_can_fetch_homepage=False,
+        homepage_url="https://example.com/",
+        html_extract_ok=False,
+        js_required=True,
+    )
+    decide_best_strategy(p, rules())
+    assert p.best_strategy == "playwright_fallback"
+    apply_robots_homepage_governance(p)
+    assert p.best_strategy == "manual_review"
+
+
+def test_robots_does_not_downgrade_rss():
+    p = SourceProfile(
+        robots_can_fetch_homepage=False,
+        has_rss=True,
+        rss_valid_count=1,
+    )
+    decide_best_strategy(p, rules())
+    apply_robots_homepage_governance(p)
+    assert p.best_strategy == "rss_then_article_extract"

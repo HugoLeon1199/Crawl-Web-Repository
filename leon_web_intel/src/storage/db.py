@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,7 @@ CREATE TABLE IF NOT EXISTS source_profiles (
   robots_ok BOOLEAN,
   robots_sitemaps TEXT,
   robots_disallow_detected BOOLEAN,
+  robots_can_fetch_homepage BOOLEAN,
   has_known_api BOOLEAN,
   known_api_adapter TEXT,
   known_api_endpoint_hint TEXT,
@@ -92,75 +94,106 @@ class WebIntelDB:
     def __init__(self, db_path: Path) -> None:
         self.db_path = db_path
         db_path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
         self.conn = duckdb.connect(str(db_path))
         self.conn.execute(DDL)
+        self._migrate_source_profiles_robots_fetch()
+
+    def _migrate_source_profiles_robots_fetch(self) -> None:
+        """Add robots_can_fetch_homepage for DBs created before this column existed."""
+        try:
+            self.conn.execute(
+                "ALTER TABLE source_profiles ADD COLUMN robots_can_fetch_homepage BOOLEAN DEFAULT TRUE"
+            )
+        except Exception:
+            pass
 
     def close(self) -> None:
-        self.conn.close()
+        with self._lock:
+            self.conn.close()
 
     def upsert_source_profile(self, row: dict[str, Any]) -> None:
-        sid = row["source_id"]
-        self.conn.execute("DELETE FROM source_profiles WHERE source_id = ?", [sid])
-        cols = ", ".join(row.keys())
-        placeholders = ", ".join(["?" for _ in row])
-        sql = f"INSERT INTO source_profiles ({cols}) VALUES ({placeholders})"
-        self.conn.execute(sql, list(row.values()))
+        with self._lock:
+            sid = row["source_id"]
+            self.conn.execute("DELETE FROM source_profiles WHERE source_id = ?", [sid])
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(["?" for _ in row])
+            sql = f"INSERT INTO source_profiles ({cols}) VALUES ({placeholders})"
+            self.conn.execute(sql, list(row.values()))
 
     def get_profile(self, source_id: str) -> dict[str, Any] | None:
-        df = self.conn.execute(
-            "SELECT * FROM source_profiles WHERE source_id = ?",
-            [source_id],
-        ).fetchdf()
-        if df.empty:
-            return None
-        return df.iloc[0].to_dict()
+        with self._lock:
+            df = self.conn.execute(
+                "SELECT * FROM source_profiles WHERE source_id = ?",
+                [source_id],
+            ).fetchdf()
+            if df.empty:
+                return None
+            return df.iloc[0].to_dict()
 
     def fetch_all_profiles(self) -> list[dict[str, Any]]:
-        df = self.conn.execute("SELECT * FROM source_profiles ORDER BY source_id").fetchdf()
-        return df.to_dict("records")
+        with self._lock:
+            df = self.conn.execute("SELECT * FROM source_profiles ORDER BY source_id").fetchdf()
+            return df.to_dict("records")
 
     def insert_discovered_url(self, row: dict[str, Any]) -> None:
-        cols = ", ".join(row.keys())
-        placeholders = ", ".join(["?" for _ in row])
-        sql = f"INSERT OR REPLACE INTO discovered_urls ({cols}) VALUES ({placeholders})"
-        self.conn.execute(sql, list(row.values()))
+        with self._lock:
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(["?" for _ in row])
+            sql = f"INSERT OR REPLACE INTO discovered_urls ({cols}) VALUES ({placeholders})"
+            self.conn.execute(sql, list(row.values()))
 
     def insert_article(self, row: dict[str, Any]) -> None:
-        cols = ", ".join(row.keys())
-        placeholders = ", ".join(["?" for _ in row])
-        sql = f"INSERT OR REPLACE INTO articles ({cols}) VALUES ({placeholders})"
-        self.conn.execute(sql, list(row.values()))
+        with self._lock:
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(["?" for _ in row])
+            sql = f"INSERT OR REPLACE INTO articles ({cols}) VALUES ({placeholders})"
+            self.conn.execute(sql, list(row.values()))
 
     def insert_crawl_error(self, row: dict[str, Any]) -> None:
-        cols = ", ".join(row.keys())
-        placeholders = ", ".join(["?" for _ in row])
-        sql = f"INSERT INTO crawl_errors ({cols}) VALUES ({placeholders})"
-        self.conn.execute(sql, list(row.values()))
+        with self._lock:
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(["?" for _ in row])
+            sql = f"INSERT INTO crawl_errors ({cols}) VALUES ({placeholders})"
+            self.conn.execute(sql, list(row.values()))
+
+    def fetch_distinct_content_hashes(self) -> set[str]:
+        with self._lock:
+            try:
+                res = self.conn.execute(
+                    "SELECT DISTINCT content_hash FROM articles WHERE content_hash IS NOT NULL AND content_hash <> ''"
+                ).fetchall()
+                return {r[0] for r in res}
+            except Exception:
+                return set()
 
     def export_source_profiles_csv(self, out_path: Path) -> None:
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        df = self.conn.execute("SELECT * FROM source_profiles ORDER BY source_id").fetchdf()
-        df.to_csv(out_path, index=False)
+        with self._lock:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            df = self.conn.execute("SELECT * FROM source_profiles ORDER BY source_id").fetchdf()
+            df.to_csv(out_path, index=False)
 
     def export_source_profiles_parquet(self, out_path: Path) -> None:
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        df = self.conn.execute("SELECT * FROM source_profiles ORDER BY source_id").fetchdf()
-        df.to_parquet(out_path, index=False)
+        with self._lock:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            df = self.conn.execute("SELECT * FROM source_profiles ORDER BY source_id").fetchdf()
+            df.to_parquet(out_path, index=False)
 
     def export_review_sources_csv(self, out_path: Path) -> None:
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        sql = """
-        SELECT * FROM source_profiles
-        WHERE best_strategy IN ('manual_review','metadata_only')
-           OR captcha_detected = TRUE
-           OR login_detected = TRUE
-           OR paywall_detected = TRUE
-           OR html_status_code >= 400
-           OR error_message IS NOT NULL
-        ORDER BY source_id
-        """
-        df = self.conn.execute(sql).fetchdf()
-        df.to_csv(out_path, index=False)
+        with self._lock:
+            out_path.parent.mkdir(parents=True, exist_ok=True)
+            sql = """
+            SELECT * FROM source_profiles
+            WHERE best_strategy IN ('manual_review','metadata_only')
+               OR captcha_detected = TRUE
+               OR login_detected = TRUE
+               OR paywall_detected = TRUE
+               OR html_status_code >= 400
+               OR error_message IS NOT NULL
+            ORDER BY source_id
+            """
+            df = self.conn.execute(sql).fetchdf()
+            df.to_csv(out_path, index=False)
 
 
 def new_id() -> str:

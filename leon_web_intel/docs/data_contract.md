@@ -18,6 +18,7 @@ One row per canonical `source_id` (domain-derived).
 | robots_ok | BOOLEAN | Parser/fetch succeeded enough to record signals |
 | robots_sitemaps | TEXT | JSON list of sitemap URLs declared in robots.txt |
 | robots_disallow_detected | BOOLEAN | Heuristic: non-empty `Disallow` paths seen |
+| robots_can_fetch_homepage | BOOLEAN | `urllib.robotparser.can_fetch(User-Agent, homepage_url)` |
 | has_known_api | BOOLEAN | Domain matched `known_api_adapters.yaml` |
 | known_api_adapter | TEXT | Adapter name (placeholder in v1) |
 | known_api_endpoint_hint | TEXT | Optional API doc/query endpoint |
