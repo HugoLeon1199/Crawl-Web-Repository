@@ -7,6 +7,48 @@ Single shared AI workflow file — Leon, ChatGPT, Gemini ↔ Cursor.
 
 ---
 
+## Current session (2026-05-16) — Run verification + GitHub CI
+
+### Current task
+
+Leon: **chạy thử** và **đưa kết quả lên GitHub**. Máy Cursor agent **không có Python** (`where python` rỗng, không tìm thấy `python.exe` trong repo hay path thường dùng), nên không chạy được `pytest` / CLI trực tiếp trên agent.
+
+### Files created
+
+- `.github/workflows/leon_web_intel_ci.yml` — GitHub Actions: **Ubuntu**, **Python 3.11**, `pip install -r leon_web_intel/requirements.txt`, **`python -m pytest -v --tb=short`**, **`python run_profile.py --input config/sources_raw.txt --dry-run`** (không HTTP). Kết quả xem tab **Actions** trên repo sau khi push.
+
+### Files modified
+
+- `.ai/CURSOR_WORKLOG.md` — mục session này.
+
+### Commands run (Cursor agent)
+
+```text
+Get-Command python* → (empty)
+Glob python.exe under workspace → 0 files
+```
+
+Không thể thực thi:
+
+```bash
+cd leon_web_intel && python -m pytest
+```
+
+### Test / CLI result
+
+| Where | Result |
+|-------|--------|
+| Cursor agent shell | **Skipped** — không có interpreter |
+| GitHub Actions | Chạy sau push; xem workflow **leon_web_intel CI** |
+
+Profile có mạng / `run_scrapy` không đưa vào CI (tránh flaky / rate limit).
+
+### Next suggested step
+
+- Mở Actions trên GitHub sau push; trên máy local Leon chạy thêm `profile-only` và `run_scrapy` với limit nhỏ nếu cần.
+
+---
+
 ## Current session (2026-05-16) — Scrapy layer runtime hardening (`_reserved` + pipeline teardown + offline HTML tests)
 
 ### Current task
