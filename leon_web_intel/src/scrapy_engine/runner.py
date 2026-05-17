@@ -6,9 +6,8 @@ import threading
 from pathlib import Path
 from typing import Literal
 
-from scrapy.crawler import CrawlerRunner
+from scrapy.crawler import CrawlerProcess
 from scrapy.utils.log import configure_logging
-from twisted.internet import defer, reactor
 
 from scrapy_engine.db_source_loader import load_sources_for_scrapy
 from scrapy_engine.settings import build_scrapy_settings
@@ -30,6 +29,13 @@ class ScrapyRunSummary:
         self.duplicates_skipped = 0
         self.pipeline_items = 0
 
+    def __copy__(self) -> ScrapyRunSummary:
+        """Scrapy copies Settings via deepcopy; keep one shared summary + lock."""
+        return self
+
+    def __deepcopy__(self, memo: object) -> ScrapyRunSummary:
+        return self
+
 
 def run_scrapy_engine(
     *,
@@ -39,7 +45,7 @@ def run_scrapy_engine(
     max_articles_per_source: int,
     db_path: Path | None = None,
 ) -> ScrapyRunSummary:
-    """Execute Scrapy lane(s). Blocks until the Twisted reactor stops."""
+    """Execute Scrapy lane(s). Uses CrawlerProcess for reliable teardown (esp. Windows)."""
     rules_path = root / "config" / "crawl_rules.yaml"
     rules = load_crawl_rules(rules_path)
     db = db_path or (root / "data" / "db" / "web_intel.duckdb")
@@ -63,36 +69,29 @@ def run_scrapy_engine(
     )
 
     configure_logging(settings={"LOG_LEVEL": settings.get("LOG_LEVEL")})
-    runner = CrawlerRunner(settings)
+    process = CrawlerProcess(settings)
 
-    @defer.inlineCallbacks
-    def _sequential() -> object:
-        try:
-            if buckets["rss"]:
-                yield runner.crawl(
-                    RssArticleSpider,
-                    sources=buckets["rss"],
-                    max_articles_per_source=max_articles_per_source,
-                    summary=summary,
-                )
-            if buckets["sitemap"]:
-                yield runner.crawl(
-                    SitemapArticleSpider,
-                    sources=buckets["sitemap"],
-                    max_articles_per_source=max_articles_per_source,
-                    summary=summary,
-                )
-            if buckets["html"]:
-                yield runner.crawl(
-                    HtmlArticleSpider,
-                    sources=buckets["html"],
-                    max_articles_per_source=max_articles_per_source,
-                    summary=summary,
-                )
-        finally:
-            reactor.stop()
+    if buckets["rss"]:
+        process.crawl(
+            RssArticleSpider,
+            sources=buckets["rss"],
+            max_articles_per_source=max_articles_per_source,
+            summary=summary,
+        )
+    if buckets["sitemap"]:
+        process.crawl(
+            SitemapArticleSpider,
+            sources=buckets["sitemap"],
+            max_articles_per_source=max_articles_per_source,
+            summary=summary,
+        )
+    if buckets["html"]:
+        process.crawl(
+            HtmlArticleSpider,
+            sources=buckets["html"],
+            max_articles_per_source=max_articles_per_source,
+            summary=summary,
+        )
 
-    d = _sequential()
-    d.addErrback(lambda _f: reactor.stop())
-    reactor.run(installSignalHandlers=False)
+    process.start()
     return summary

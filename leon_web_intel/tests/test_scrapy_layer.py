@@ -149,7 +149,7 @@ def test_scrapy_settings_robots_obey_true(tmp_path: Path) -> None:
 
 
 @pytest.fixture
-def pipeline_env(tmp_path: Path) -> Generator[tuple[WebIntelArticlePipeline, Path], None, None]:
+def pipeline_env(tmp_path: Path) -> Generator[tuple[WebIntelArticlePipeline, Path, Settings], None, None]:
     db_path = tmp_path / "web_intel.duckdb"
     rules_path = tmp_path / "crawl_rules.yaml"
     raw_root = tmp_path / "raw"
@@ -195,13 +195,15 @@ def pipeline_env(tmp_path: Path) -> Generator[tuple[WebIntelArticlePipeline, Pat
     spider = scrapy.Spider(name="test")
     pipe.open_spider(spider)
     try:
-        yield pipe, db_path
+        yield pipe, db_path, st
     finally:
         pipe.close_spider(spider)
 
 
-def test_pipeline_blocks_access_control(pipeline_env: tuple[WebIntelArticlePipeline, Path]) -> None:
-    pipe, db_path = pipeline_env
+def test_pipeline_blocks_access_control(pipeline_env: tuple[WebIntelArticlePipeline, Path, Settings]) -> None:
+    pipe, db_path, settings = pipeline_env
+    spider = scrapy.Spider(name="test")
+    spider.settings = settings
     item = ArticleItem(
         source_id="s1",
         url="https://example.com/a",
@@ -210,9 +212,10 @@ def test_pipeline_blocks_access_control(pipeline_env: tuple[WebIntelArticlePipel
         response_status=200,
         source_active=True,
     )
-    pipe.process_item(item, scrapy.Spider(name="test"))
+    pipe.process_item(item, spider)
+    pipe.close_spider(spider)
 
-    db = duckdb.connect(str(db_path), read_only=True)
+    db = duckdb.connect(str(db_path))
     try:
         errs = db.execute("SELECT error_type FROM crawl_errors").fetchall()
         arts = db.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
@@ -222,8 +225,10 @@ def test_pipeline_blocks_access_control(pipeline_env: tuple[WebIntelArticlePipel
     assert any(row[0] == "AccessControlDetected" for row in errs)
 
 
-def test_pipeline_short_content_to_crawl_errors(pipeline_env: tuple[WebIntelArticlePipeline, Path]) -> None:
-    pipe, db_path = pipeline_env
+def test_pipeline_short_content_to_crawl_errors(pipeline_env: tuple[WebIntelArticlePipeline, Path, Settings]) -> None:
+    pipe, db_path, settings = pipeline_env
+    spider = scrapy.Spider(name="test")
+    spider.settings = settings
     item = ArticleItem(
         source_id="s2",
         url="https://example.com/b",
@@ -232,9 +237,10 @@ def test_pipeline_short_content_to_crawl_errors(pipeline_env: tuple[WebIntelArti
         response_status=200,
         source_active=True,
     )
-    pipe.process_item(item, scrapy.Spider(name="test"))
+    pipe.process_item(item, spider)
+    pipe.close_spider(spider)
 
-    db = duckdb.connect(str(db_path), read_only=True)
+    db = duckdb.connect(str(db_path))
     try:
         types = {r[0] for r in db.execute("SELECT error_type FROM crawl_errors").fetchall()}
         arts = db.execute("SELECT COUNT(*) FROM articles").fetchone()[0]
@@ -261,10 +267,11 @@ def test_html_article_spider_schedule_cap_no_network() -> None:
     assert spider._attempted[sid] == 0
 
     html = "<html><body>" + "".join(f'<a href="https://example.com/p{i}">x</a>' for i in range(50)) + "</body></html>"
-    resp = HtmlResponse(url="https://example.com/", body=html.encode(), encoding="utf-8")
-    resp.meta["source_id"] = sid
-    resp.meta["depth"] = 0
-    resp.meta["source_active"] = True
+    req = Request(url="https://example.com/")
+    req.meta["source_id"] = sid
+    req.meta["depth"] = 0
+    req.meta["source_active"] = True
+    resp = HtmlResponse(url=req.url, request=req, body=html.encode(), encoding="utf-8")
 
     out = list(spider.parse_page(resp))
     items = [x for x in out if isinstance(x, ArticleItem)]
@@ -277,10 +284,11 @@ def test_html_article_spider_schedule_cap_no_network() -> None:
 
     child_url = reqs[0].url
     child_html = "<html><body><a href=\"https://example.com/z\">z</a></body></html>"
-    resp2 = HtmlResponse(url=child_url, body=child_html.encode(), encoding="utf-8")
-    resp2.meta["source_id"] = sid
-    resp2.meta["depth"] = 1
-    resp2.meta["source_active"] = True
+    req2 = Request(url=child_url)
+    req2.meta["source_id"] = sid
+    req2.meta["depth"] = 1
+    req2.meta["source_active"] = True
+    resp2 = HtmlResponse(url=req2.url, request=req2, body=child_html.encode(), encoding="utf-8")
 
     out2 = list(spider.parse_page(resp2))
     items2 = [x for x in out2 if isinstance(x, ArticleItem)]
@@ -300,8 +308,9 @@ def test_html_article_spider_max_one_schedules_homepage_only() -> None:
     assert spider._reserved[sid] == 1
 
     html = "<html><body><a href=\"https://example.org/a\">a</a><a href=\"https://example.org/b\">b</a></body></html>"
-    resp = HtmlResponse(url="https://example.org/", body=html.encode(), encoding="utf-8")
-    resp.meta.update({"source_id": sid, "depth": 0, "source_active": True})
+    req = Request(url="https://example.org/")
+    req.meta.update({"source_id": sid, "depth": 0, "source_active": True})
+    resp = HtmlResponse(url=req.url, request=req, body=html.encode(), encoding="utf-8")
     out = list(spider.parse_page(resp))
     assert len([x for x in out if isinstance(x, Request)]) == 0
     assert spider._reserved[sid] == 1

@@ -49,6 +49,7 @@ class WebIntelArticlePipeline:
     def close_spider(self, spider: scrapy.Spider) -> None:
         if self.db:
             self.db.close()
+            self.db = None
 
     def _bump_pipeline_items(self) -> None:
         sm = self.summary

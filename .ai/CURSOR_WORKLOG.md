@@ -7,6 +7,45 @@ Single shared AI workflow file — Leon, ChatGPT, Gemini ↔ Cursor.
 
 ---
 
+## Current session (2026-05-17) — NuGet Python 3.11 on agent: pytest + profile OK; DuckDB migration + Scrapy runner fixes
+
+### Current task
+
+Leon: **ép chạy luôn**. Cài **Python 3.11.9** qua **NuGet** vào repo-local **`.tools/`** (đã **gitignore**), `pip install -r requirements.txt`, chạy **`pytest`**, **`run_profile.py`**, thử **`run_scrapy.py`**.
+
+### Files modified
+
+- `leon_web_intel/src/storage/db.py` — sau **`ALTER TABLE ... ADD COLUMN`** thất bại (cột đã có trong DDL), gọi **`ROLLBACK`** để DuckDB không để transaction **aborted** (fix **`insert_crawl_error`** / pipeline tests).
+- `leon_web_intel/src/scrapy_engine/pipelines.py` — **`close_spider`**: **`self.db = None`** sau **`close()`**.
+- `leon_web_intel/src/scrapy_engine/runner.py` — **`CrawlerProcess`** thay **`CrawlerRunner` + `reactor.run`**; **`ScrapyRunSummary.__copy__` / `__deepcopy__`** (Settings deepcopy không pickle **`threading.Lock`**).
+- `leon_web_intel/src/scrapy_engine/settings.py` — **`CLOSESPIDER_TIMEOUT`** 600s; **`TWISTED_REACTOR`** = **`AsyncioSelectorReactor`** (Windows).
+- `leon_web_intel/tests/test_scrapy_layer.py` — fixture **`yield`** kèm **`Settings`**; spider gắn **`settings`**; đóng pipeline trước khi **`duckdb.connect`**; **`HtmlResponse`** gắn **`Request`** cho **`meta`** (Scrapy 2.15).
+- `.gitignore` — ignore **`.tools/`** (NuGet + Python cục bộ).
+
+### Commands run (NuGet Python)
+
+Interpreter:
+
+`D:\cursor\LEONCODE\CRAWL WEB\.tools\nuget_packages\python.3.11.9\tools\python.exe`  
+(`PYTHONPATH` = `leon_web_intel\src` cho CLI.)
+
+| Command | Result |
+|---------|--------|
+| `python -m pytest -v --tb=short` | **22 passed** (~4s) |
+| `python run_profile.py ... --dry-run` | **OK** — 198 unique sources |
+| `python run_profile.py ... --profile-only --limit 10 --force-refresh` | **OK** (~101s) — ghi DuckDB + exports |
+| `python run_scrapy.py --strategy rss --limit 1 ...` | **Treo >120s** trên agent Windows — log dừng sau pipeline init, **chưa thấy** `Spider opened` (môi trường/Cursor); **CI Linux** và máy Leon vẫn nên thử lại. |
+
+### Known limitations
+
+- **`run_scrapy`** chưa xác nhận end-to-end trên agent Windows; cần xác nhận trên **Linux Actions** hoặc máy local.
+
+### Next suggested step
+
+- Xem GitHub Actions sau push; local Windows: chạy **`run_scrapy`** với limit nhỏ nếu proxy/firewall khác agent.
+
+---
+
 ## Current session (2026-05-16) — Run verification + GitHub CI
 
 ### Current task

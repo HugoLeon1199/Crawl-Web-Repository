@@ -106,7 +106,11 @@ class WebIntelDB:
                 "ALTER TABLE source_profiles ADD COLUMN robots_can_fetch_homepage BOOLEAN DEFAULT TRUE"
             )
         except Exception:
-            pass
+            # DuckDB leaves the transaction aborted if ALTER fails (e.g. column already in DDL).
+            try:
+                self.conn.execute("ROLLBACK")
+            except Exception:
+                pass
 
     def close(self) -> None:
         with self._lock:

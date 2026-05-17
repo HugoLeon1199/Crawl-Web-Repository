@@ -21,6 +21,8 @@ def build_scrapy_settings_dict(
     return {
         "BOT_NAME": "leon_web_intel_scrapy",
         "ROBOTSTXT_OBEY": True,
+        # Asyncio reactor avoids some Windows/select-related hangs with the default reactor.
+        "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
         "USER_AGENT": rules.user_agent,
         "DOWNLOAD_TIMEOUT": int(rules.request_timeout_seconds),
         "RETRY_TIMES": max(0, int(rules.max_retries)),
@@ -30,6 +32,8 @@ def build_scrapy_settings_dict(
         "LOG_LEVEL": "INFO",
         "COOKIES_ENABLED": False,
         "TELNETCONSOLE_ENABLED": False,
+        # Wall-clock cap so the CLI cannot hang forever on stuck downloads (CloseSpider is in EXTENSIONS_BASE).
+        "CLOSESPIDER_TIMEOUT": 600,
         "ITEM_PIPELINES": {
             "scrapy_engine.pipelines.WebIntelArticlePipeline": 300,
         },

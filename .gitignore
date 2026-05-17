@@ -1,0 +1,11 @@
+# Local tooling (NuGet Python used by Cursor agent / optional dev)
+.tools/
+
+# Runtime artifacts (local profiling / crawls — do not commit)
+leon_web_intel/data/cache/
+leon_web_intel/data/raw/
+leon_web_intel/data/db/*.duckdb
+leon_web_intel/logs/
+**/__pycache__/
+.pytest_cache/
+*.py[cod]
