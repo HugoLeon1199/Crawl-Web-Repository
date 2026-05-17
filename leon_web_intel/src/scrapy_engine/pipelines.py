@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 
 import scrapy
+from itemadapter import ItemAdapter
 
 from extraction.article_extractor import compute_quality_score
 from scrapy_engine.extract_helpers import access_control_triplet, extract_with_trafilatura
@@ -108,7 +109,7 @@ class WebIntelArticlePipeline:
         self._bump_pipeline_items()
         assert self.db is not None and self.rules is not None and self.raw_store is not None
 
-        adapter = scrapy.ItemAdapter(item)
+        adapter = ItemAdapter(item)
         source_id = adapter.get("source_id") or ""
         url = adapter.get("url") or ""
         strategy = adapter.get("crawl_strategy_used") or ""

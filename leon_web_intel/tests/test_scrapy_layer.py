@@ -168,7 +168,8 @@ def pipeline_env(tmp_path: Path) -> tuple[WebIntelArticlePipeline, Path]:
         ),
         encoding="utf-8",
     )
-    WebIntelDB(db_path)
+    _db_init = WebIntelDB(db_path)
+    _db_init.close()
 
     st = Settings()
     st.setdict(

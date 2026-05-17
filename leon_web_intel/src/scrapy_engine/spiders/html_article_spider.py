@@ -37,9 +37,15 @@ class HtmlArticleSpider(scrapy.Spider):
             with self.summary.lock:
                 self.summary.requests_scheduled += n
 
+    def _host_key(self, netloc: str) -> str:
+        host = netloc.lower()
+        if host.startswith("www."):
+            host = host[4:]
+        return host
+
     def _same_registrable_host(self, a: str, b: str) -> bool:
-        ha = urlparse(a).netloc.lower().lstrip("www.")
-        hb = urlparse(b).netloc.lower().lstrip("www.")
+        ha = self._host_key(urlparse(a).netloc)
+        hb = self._host_key(urlparse(b).netloc)
         return bool(ha and hb and ha == hb)
 
     def start_requests(self) -> Any:
@@ -64,22 +70,29 @@ class HtmlArticleSpider(scrapy.Spider):
         depth = int(response.meta["depth"])
         active = response.meta.get("source_active", True)
 
-        if self._attempted.get(sid, 0) < self.max_articles_per_source:
-            self._attempted[sid] = self._attempted.get(sid, 0) + 1
-            yield ArticleItem(
-                source_id=sid,
-                url=response.url,
-                crawl_strategy_used=self.crawl_strategy,
-                html_body=response.body,
-                response_status=response.status,
-                source_active=active,
-            )
+        if self._attempted.get(sid, 0) >= self.max_articles_per_source:
+            return
+
+        self._attempted[sid] = self._attempted.get(sid, 0) + 1
+        yield ArticleItem(
+            source_id=sid,
+            url=response.url,
+            crawl_strategy_used=self.crawl_strategy,
+            html_body=response.body,
+            response_status=response.status,
+            source_active=active,
+        )
 
         if depth >= self.max_depth:
             return
 
+        if self._attempted.get(sid, 0) >= self.max_articles_per_source:
+            return
+
         links = response.css("a::attr(href)").getall()[: self.max_links_per_page]
         for href in links:
+            if self._attempted.get(sid, 0) >= self.max_articles_per_source:
+                break
             if not href or href.startswith(("#", "mailto:", "javascript:", "tel:")):
                 continue
             abs_u = urljoin(response.url, href)

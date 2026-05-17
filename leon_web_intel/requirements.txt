@@ -16,3 +16,4 @@ pyarrow>=16.0.0
 playwright>=1.44.0
 pytest>=8.2.0
 scrapy>=2.11.0
+itemadapter>=0.7.0

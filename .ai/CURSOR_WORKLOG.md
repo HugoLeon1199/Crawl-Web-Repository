@@ -7,9 +7,73 @@ Single shared AI workflow file — Leon, ChatGPT, Gemini ↔ Cursor.
 
 ---
 
-## Current session (2026-05-16) — Scrapy production crawl scaffold (Phase 3 prep)
+## Current session (2026-05-16) — Scrapy scaffold pre-flight patch (runtime + HTML cap + tests)
 
 ### Current task
+
+Minimal fixes before **real** Scrapy runs: correct **ItemAdapter** import, **cap HTML spider** so `max_articles_per_source` stops both article attempts and link following, safer **www** stripping, **close DuckDB** in pipeline test fixture (Windows locks); run pytest + CLI smoke.
+
+### Files modified
+
+- `leon_web_intel/src/scrapy_engine/pipelines.py` — use **`from itemadapter import ItemAdapter`** (do **not** use `scrapy.ItemAdapter`; avoids runtime/type mismatch on some Scrapy builds).
+- `leon_web_intel/src/scrapy_engine/spiders/html_article_spider.py` — early **return** when `self._attempted[sid] >= max_articles_per_source` (no item, no follows); re-check cap **before** scheduling each link and **after** depth gate; **`_host_key`**: `startswith("www.")` then `host = host[4:]` (no `lstrip("www.")`).
+- `leon_web_intel/tests/test_scrapy_layer.py` — `WebIntelDB(db_path)` for schema init → **`.close()`** immediately so DuckDB file not locked when pipeline opens DB again.
+- `leon_web_intel/requirements.txt` — explicit **`itemadapter>=0.7.0`** (direct import).
+
+### Files created / deleted
+
+- *(none)*
+
+### What was fixed (logic)
+
+1. **Pipeline:** `ItemAdapter` from **`itemadapter`** package — stable across Scrapy versions.
+2. **HTML spider:** Article attempts and **child Request scheduling** both respect the same per-source cap (queued requests that wake after cap still **exit immediately** in `parse_page`).
+3. **Host compare:** Only strips a single leading **`www.`**, avoids `lstrip("www.")` mangling hosts like `wwwtest.example`.
+4. **Tests:** Fixture avoids holding two DuckDB handles on the same file on Windows.
+
+### Commands run (Cursor agent)
+
+```bash
+cd leon_web_intel
+python -m pytest
+python run_profile.py --input config/sources_raw.txt --dry-run
+python run_profile.py --input config/sources_raw.txt --profile-only --limit 10 --force-refresh
+python run_scrapy.py --strategy all --limit 5 --max-articles-per-source 2
+```
+
+### Test / CLI result
+
+- **`py -3.13 -m pytest`**: **FAILED to start** — launcher targets missing interpreter:
+
+```
+Unable to create process using 'D:\python.exe -m pytest -q': The system cannot find the file specified.
+```
+
+- **`run_profile.py` / `run_scrapy.py`**: **Not executed** here (same broken `py` → `D:\python.exe` binding).
+
+Leon: fix Windows **`py.ini` / Python install path** (or run via full path to `python.exe`), then rerun the four commands locally and paste any new tracebacks.
+
+### Known issues / limitations
+
+- Unchanged: per-URL robots, reactor single-run semantics, approximate `requests_scheduled`.
+
+### Notes for ChatGPT review
+
+- Optional unit test: mock **HtmlArticleSpider.parse_page** queue depth vs cap (no network).
+
+### Notes for Gemini review
+
+- Whether **cap** should decrement on pipeline **rejection** (ShortContent) so HTML spider keeps trying more URLs until N successes — out of scope for this minimal patch.
+
+### Next suggested step
+
+- Leon runs **`pip install -r requirements.txt`** + **`pytest`** + bounded **`run_scrapy`** smoke; commit/push patch when satisfied.
+
+---
+
+## Previous session (2026-05-16) — Scrapy production crawl scaffold (Phase 3 prep)
+
+### Scope
 
 Add a **minimal Scrapy layer** under `leon_web_intel/src/scrapy_engine/` plus `run_scrapy.py`, wired **after** SourceProfiler (`best_strategy` in DuckDB). **No** profiler refactor; Scrapy is **not** a new peer strategy in the decision tree.
 
