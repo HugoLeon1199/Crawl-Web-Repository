@@ -1,18 +1,18 @@
 # Profile Summary
 
-- total_sources: 10
-- active_sources: 10
-- active_candidate_sources: 0
+- total_sources: 16
+- active_sources: 13
+- active_candidate_sources: 3
 - review_sources: 0
 - error_sources: 0
 
 ## Strategy Breakdown
 
-- api_first: 2
+- api_first: 3
 - rss_then_article_extract: 4
-- sitemap_then_article_extract: 4
-- html_then_trafilatura: 0
-- playwright_fallback: 0
+- sitemap_then_article_extract: 6
+- html_then_trafilatura: 2
+- playwright_fallback: 1
 - metadata_only: 0
 - manual_review: 0
 
@@ -23,20 +23,27 @@ Top 20 ready sources:
 source_id | domain | best_strategy | rss | sitemap | html_ok
 --- | --- | --- | --- | --- | ---
 gdeltproject_org | gdeltproject.org | api_first | False | False | True
+sec_gov | sec.gov | api_first | False | True | True
 worldbank_org | worldbank.org | api_first | False | True | True
 aljazeera_com | aljazeera.com | rss_then_article_extract | True | True | True
 apnews_com | apnews.com | sitemap_then_article_extract | False | True | True
 bbc_com | bbc.com | sitemap_then_article_extract | False | True | True
 dw_com | dw.com | sitemap_then_article_extract | False | True | False
+ec_europa_eu | ec.europa.eu | sitemap_then_article_extract | False | True | True
 france24_com | france24.com | rss_then_article_extract | True | True | True
+fred_stlouisfed_org | fred.stlouisfed.org | html_then_trafilatura | False | False | True
+imf_org | imf.org | html_then_trafilatura | False | False | True
+oecd_org | oecd.org | playwright_fallback | False | False | False
 reutersagency_com | reutersagency.com | sitemap_then_article_extract | False | True | True
 theguardian_com | theguardian.com | rss_then_article_extract | True | True | True
 un_org | un.org | rss_then_article_extract | True | False | True
+who_int | who.int | sitemap_then_article_extract | False | True | True
 
 ## Sources Needing Review
 
 source_id | domain | reason | error_message
 --- | --- | --- | ---
+oecd_org | oecd.org | playwright_fallback, paywall_signal | 
 
 ## Next Steps
 

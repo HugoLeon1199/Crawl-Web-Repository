@@ -1,52 +1,55 @@
 # Final Crawl Report
 
 ## Run Summary
-- Run ID: 52cb53b0-b817-447f-8a0f-633a6359713f
-- Status: failed
-- Started at: 2026-05-17 11:35:25.310937
-- Ended at: 2026-05-17 11:41:07.063535
+- Run ID: 72f7fe6c-1276-4203-b5a5-c73e97ac2de3
+- Status: success
+- Started at: 2026-05-17 12:49:41.798144
+- Ended at: 2026-05-17 12:51:20.008703
 - Input path: config\sources_raw.txt
-- Strategy: all
-- Limit sources: 10
-- Max articles per source: 2
+- Strategy: rss
+- Limit sources: 12
+- Max articles per source: 100
 - Force refresh: True
 
 ## Totals
-- Sources: 10
+- Sources: 16
 - Discovered URLs: 0
 - Frontier pending: 0
 - Frontier crawling: 0
-- Frontier crawled: 3
-- Frontier failed: 0
-- Frontier skipped: 13
-- Articles: 3
-- Errors: 13
+- Frontier crawled: 24
+- Frontier failed: 7
+- Frontier skipped: 43
+- Articles: 24
+- Errors: 122
 
 ## Articles By Strategy
+- rss_then_article_extract: 22
 - sitemap_then_article_extract: 2
-- rss_then_article_extract: 1
 
 ## Errors By Type
-- AccessControlDetected: 13
+- AccessControlDetected: 115
+- ShortContent: 7
 
 ## Top Sources By Articles
+- aljazeera_com: 15
+- france24_com: 6
 - bbc_com: 2
 - un_org: 1
 
 ## Top Sources By Errors
-- aljazeera_com: 2
+- theguardian_com: 74
+- france24_com: 22
+- aljazeera_com: 18
 - apnews_com: 2
 - dw_com: 2
-- france24_com: 2
 - reutersagency_com: 2
-- theguardian_com: 2
-- un_org: 1
+- un_org: 2
 
 ## Quality And Content
 - Average quality_score: 9.6667
-- Content length min: 310
-- Content length avg: 1206.33
-- Content length max: 2468
+- Content length min: 306
+- Content length avg: 2517.92
+- Content length max: 10419
 
 ## Safety Notes
 - robots obey enabled
