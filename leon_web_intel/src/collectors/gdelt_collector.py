@@ -52,7 +52,24 @@ def fetch_artlist_window(
     }
     last: httpx.Response | None = None
     for attempt in range(5):
-        r = client.get(GDELT_DOC_API, params=params, timeout=90.0)
+        try:
+            r = client.get(GDELT_DOC_API, params=params, timeout=90.0)
+        except (
+            httpx.TimeoutException,
+            httpx.ConnectError,
+            httpx.NetworkError,
+            OSError,
+        ) as exc:
+            sleep_s = min(45.0, 1.25 * (2**attempt))
+            logger.warning(
+                "GDELT transport error {} — retry in {:.1f}s (attempt {}/{})",
+                exc,
+                sleep_s,
+                attempt + 1,
+                5,
+            )
+            time.sleep(sleep_s)
+            continue
         last = r
         if r.status_code in (429, 503):
             sleep_s = min(45.0, 1.25 * (2**attempt))
@@ -66,21 +83,43 @@ def fetch_artlist_window(
             )
             time.sleep(sleep_s)
             continue
-        r.raise_for_status()
+        try:
+            r.raise_for_status()
+        except httpx.HTTPStatusError:
+            sleep_s = min(30.0, 1.25 * (2**attempt))
+            logger.warning(
+                "GDELT ArtList HTTP {} — retry in {:.1f}s (attempt {}/{})",
+                r.status_code,
+                sleep_s,
+                attempt + 1,
+                5,
+            )
+            time.sleep(sleep_s)
+            continue
         text = r.text.strip()
         if not text:
             return []
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
-            logger.warning("GDELT non-JSON response ({} chars)", len(text))
-            return []
+            logger.warning("GDELT non-JSON response ({} chars): {!r}", len(text), text[:200])
+            sleep_s = min(20.0, 1.25 * (2**attempt))
+            time.sleep(sleep_s)
+            continue
         arts = data.get("articles")
         if not isinstance(arts, list):
-            return []
+            sleep_s = min(15.0, 1.0 * (2**attempt))
+            logger.warning("GDELT unexpected JSON shape — retry in {:.1f}s", sleep_s)
+            time.sleep(sleep_s)
+            continue
         return [a for a in arts if isinstance(a, dict)]
     if last is not None:
-        last.raise_for_status()
+        logger.warning(
+            "GDELT ArtList exhausted retries for window {} .. {} (last HTTP {})",
+            params.get("startdatetime"),
+            params.get("enddatetime"),
+            getattr(last, "status_code", "?"),
+        )
     return []
 
 

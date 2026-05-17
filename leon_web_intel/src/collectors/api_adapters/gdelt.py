@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from loguru import logger
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord
 from collectors.gdelt_collector import iter_gdelt_artlist_day, normalize_gdelt_query, url_to_gdelt_source_id
@@ -56,14 +57,17 @@ class GdeltAdapter(ApiAdapter):
         _ = client  # iterator uses its own client
         start_utc, end_utc = target_date_range(target_date_str, timezone_name)
         out: list[ApiRecord] = []
-        for art in iter_gdelt_artlist_day(
-            query=normalize_gdelt_query(query),
-            window_start_utc=start_utc,
-            window_end_utc=end_utc,
-            max_records_total=max_records,
-            http_timeout=float(rules.request_timeout_seconds) + 30.0,
-        ):
-            rec = parse_gdelt_article_dict(art)
-            if rec:
-                out.append(rec)
+        try:
+            for art in iter_gdelt_artlist_day(
+                query=normalize_gdelt_query(query),
+                window_start_utc=start_utc,
+                window_end_utc=end_utc,
+                max_records_total=max_records,
+                http_timeout=float(rules.request_timeout_seconds) + 30.0,
+            ):
+                rec = parse_gdelt_article_dict(art)
+                if rec:
+                    out.append(rec)
+        except Exception as exc:  # noqa: BLE001 - degrade gracefully for flaky GDELT/network
+            logger.exception("GDELT iterator stopped after {} articles: {}", len(out), exc)
         return out

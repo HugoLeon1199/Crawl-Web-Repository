@@ -310,7 +310,11 @@ def main(argv: list[str] | None = None) -> int:
         )
         print("")
         print("===== API HUB COMPLETE =====")
-        print(f"Rows by adapter (window): {summary['api_summary']['records_by_adapter']}")
+        print(f"This run — new rows written (per adapter): {summary['counts_written_this_run']}")
+        print(
+            "Total in DuckDB for this UTC window (may include prior runs): "
+            f"{summary['api_summary']['records_by_adapter']}"
+        )
         print(meta_csv.resolve())
         print(report_md.resolve())
         return 0
