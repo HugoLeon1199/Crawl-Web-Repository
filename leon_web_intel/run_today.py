@@ -22,6 +22,17 @@ from utils.full_run import profile_limit_arg, resolve_max_urls_per_source  # noq
 EXPORT_META = ROOT / "data" / "exports" / "today_run_meta.json"
 
 
+def count_raw_source_lines(path: Path) -> int:
+    if not path.is_file():
+        return 0
+    n = 0
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        s = line.strip()
+        if s and not s.startswith("#"):
+            n += 1
+    return n
+
+
 def build_gdelt_command(
     *,
     python_executable: str,
@@ -44,6 +55,35 @@ def build_gdelt_command(
         str(max_records),
     ]
     if extract_content:
+        cmd.append("--extract-content")
+    return cmd
+
+
+def build_api_hub_command(
+    *,
+    python_executable: str,
+    date_arg: str,
+    timezone_arg: str,
+    apis: str,
+    api_query: str,
+    api_max_records: int,
+    api_extract_content: bool,
+) -> list[str]:
+    cmd = [
+        python_executable,
+        "run_api_today.py",
+        "--date",
+        date_arg,
+        "--timezone",
+        timezone_arg,
+        "--apis",
+        apis,
+        "--query",
+        api_query,
+        "--max-records",
+        str(api_max_records),
+    ]
+    if api_extract_content:
         cmd.append("--extract-content")
     return cmd
 
@@ -137,12 +177,14 @@ def _run_step(cmd: list[str], *, timeout_seconds: int | None) -> tuple[int, bool
     return int(completed.returncode), False
 
 
-def _write_run_meta(*, run_id: str, argv_repr: list[str], full_cmd: str) -> None:
+def _write_run_meta(
+    *, run_id: str, argv_repr: list[str], full_cmd: str, extra: dict | None = None
+) -> None:
     EXPORT_META.parent.mkdir(parents=True, exist_ok=True)
-    EXPORT_META.write_text(
-        json.dumps({"run_id": run_id, "argv": argv_repr, "full_run_command": full_cmd}, indent=2),
-        encoding="utf-8",
-    )
+    payload: dict = {"run_id": run_id, "argv": argv_repr, "full_run_command": full_cmd}
+    if extra:
+        payload.update(extra)
+    EXPORT_META.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -178,12 +220,23 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gdelt-query", default="*")
     parser.add_argument("--gdelt-max-records", type=int, default=0)
     parser.add_argument("--gdelt-extract-content", action="store_true")
+    parser.add_argument(
+        "--include-apis",
+        action="store_true",
+        help="Run run_api_today.py (API Hub) before profiling / Scrapy",
+    )
+    parser.add_argument("--apis", default="all", help="Passed to run_api_today (--apis)")
+    parser.add_argument("--api-query", default="*")
+    parser.add_argument("--api-max-records", type=int, default=0)
+    parser.add_argument("--api-extract-content", action="store_true")
     args = parser.parse_args(argv)
 
     if args.close_spider_timeout <= 0:
         parser.error("--close-spider-timeout must be positive")
 
     max_urls_eff = resolve_max_urls_per_source(args.max_urls_per_source)
+
+    raw_source_lines = count_raw_source_lines(args.input)
 
     eff_argv = list(sys.argv[1:] if argv is None else argv)
     full_cmd = "python run_today.py " + " ".join(shlex.quote(a) for a in eff_argv)
@@ -217,6 +270,12 @@ def main(argv: list[str] | None = None) -> int:
                     "gdelt_query": args.gdelt_query,
                     "gdelt_max_records": args.gdelt_max_records,
                     "gdelt_extract_content": bool(args.gdelt_extract_content),
+                    "include_apis": bool(args.include_apis),
+                    "apis": args.apis,
+                    "api_query": args.api_query,
+                    "api_max_records": args.api_max_records,
+                    "api_extract_content": bool(args.api_extract_content),
+                    "raw_source_lines": raw_source_lines,
                 },
                 sort_keys=True,
             ),
@@ -225,9 +284,30 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         db.close()
 
-    _write_run_meta(run_id=run_id, argv_repr=["run_today.py", *eff_argv], full_cmd=full_cmd)
+    _write_run_meta(
+        run_id=run_id,
+        argv_repr=["run_today.py", *eff_argv],
+        full_cmd=full_cmd,
+        extra={
+            "raw_source_lines": raw_source_lines,
+            "include_apis": bool(args.include_apis),
+            "apis": args.apis,
+        },
+    )
 
     commands: list[list[str]] = []
+    if args.include_apis:
+        commands.append(
+            build_api_hub_command(
+                python_executable=sys.executable,
+                date_arg=args.date,
+                timezone_arg=args.timezone,
+                apis=args.apis,
+                api_query=args.api_query,
+                api_max_records=args.api_max_records,
+                api_extract_content=bool(args.api_extract_content),
+            )
+        )
     if args.include_gdelt:
         commands.append(
             build_gdelt_command(

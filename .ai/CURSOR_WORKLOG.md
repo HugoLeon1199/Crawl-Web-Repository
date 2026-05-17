@@ -3,6 +3,49 @@
 **Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
 **Project:** Leon Global Web Intelligence Engine  
 
+## Current session (2026-05-16) — API Hub v1 + TODAY GLOBAL INTELLIGENCE ENGINE integration
+
+### Pytest
+
+- **Expected cwd:** `leon_web_intel`.
+- **Command:** `python -m pytest -v --tb=short` (or `tests/test_api_hub.py` only).
+- **Result on Cursor agent VM:** **not executed** — `python` / `py` not available (`py` pointed at missing `D:\\python.exe`). Run locally on Leon’s machine and paste results here.
+
+### Code delivered
+
+- **`src/collectors/api_adapters/`** — `base.py` (`ApiRecord`, `ApiAdapter`, retry helper), `registry.py`, implementations: GDELT, OpenAlex, arXiv, SEC EDGAR, World Bank, PubMed, GitHub, Crossref, Semantic Scholar (`max_records==0` → unlimited where applicable).
+- **`run_api_today.py`** — CLI (`--date`, `--timezone`, `--apis`, `--query`, `--max-records`, `--extract-content`, `--fail-fast` / `--no-continue-on-error`), dedupe by normalized URL, persists `api_records` + `discovered_urls`, optional `api_trafilatura_extract`, writes `today_api_metadata.csv` + `today_api_report.md`.
+- **`src/storage/db.py`** — `api_records` helpers: upsert/insert, fetch, exports (`today_api_metadata.csv`, `today_ai_input.jsonl`, optional JSONL dump), `get_api_summary_stats`, API hub error rollup, `fetch_today_api_headlines`, distinct article sources in `get_today_summary_stats`.
+- **`run_today.py`** — `--include-apis`, `--apis`, `--api-query`, `--api-max-records`, `--api-extract-content`; `today_run_meta.json` gains `raw_source_lines`, API flags.
+- **`run_export.py` — today-only:** refreshes API CSV/report + **`today_ai_input.jsonl`** after `today_final_report.md`.
+- **`reporting/crawl_report.py`** — **`today_final_report.md`** expanded: API counts per adapter, intelligence totals, duplicate/access/short/not-today, API errors by adapter, mixed top 50 URLs, output file list, split-run commands.
+- **`reporting/api_hub_report.py`** — `today_api_report.md` writer.
+- **`tests/test_api_hub.py`** — offline parse tests + `run_api_hub` continue-on-error / fail-fast + export smoke tests (**no network**).
+- **`.gitignore`** — `today_ai_input.jsonl`, `today_articles.csv`, `today_articles.parquet` under exports.
+
+### Commands (local)
+
+```bash
+cd leon_web_intel
+python -m pytest -v --tb=short
+python run_api_today.py --date today --timezone Europe/Amsterdam --apis all --query "*" --max-records 0 --extract-content
+python run_today.py --input config/sources_raw.txt --strategy all --include-apis --apis all --api-query "*" --api-max-records 0 --api-extract-content --date today --timezone Europe/Amsterdam --profile-limit 0 --max-urls-per-source 0 --step-timeout-seconds 14400 --close-spider-timeout 10800 --force-refresh
+```
+
+### Metrics placeholders (fill after local run)
+
+- API records by adapter: *(run DB / CSV)*  
+- API extracted full-text count: *(articles with `api_trafilatura_extract`)*  
+- RSS / sitemap / HTML article counts: *(today export)*  
+- Total intelligence items / errors / top 50: *(see `today_final_report.md`)*  
+
+### GitHub-safe artifacts
+
+- **Commit:** code, tests, `.ai/CURSOR_WORKLOG.md`, optional regenerated **`today_final_report.md`**, **`today_articles_metadata.csv`**, **`today_api_metadata.csv`**, **`today_api_report.md`**, **`today_gdelt_*.csv/md`** if produced.
+- **Do not commit:** `today_ai_input.jsonl` (full text), `today_articles.csv` / `.parquet`, DuckDB, raw HTML, large logs (see `.gitignore`).
+
+---
+
 ## Current session (2026-05-17) — TODAY GLOBAL full-run plumbing + GDELT DOC lane
 
 ### Pytest

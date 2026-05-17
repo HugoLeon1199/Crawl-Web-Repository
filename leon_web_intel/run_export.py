@@ -15,6 +15,7 @@ if str(SRC) not in sys.path:
 from reporting.crawl_report import write_final_crawl_report, write_today_crawl_report  # noqa: E402
 from storage.db import WebIntelDB  # noqa: E402
 from utils.today_filter import resolve_calendar_date, target_date_range  # noqa: E402
+from reporting.api_hub_report import write_today_api_report  # noqa: E402
 from reporting.gdelt_report import write_today_gdelt_report  # noqa: E402
 
 
@@ -64,6 +65,9 @@ def main() -> int:
         "final_report": out_dir / "today_final_report.md",
         "gdelt_metadata_csv": out_dir / "today_gdelt_metadata.csv",
         "gdelt_report_md": out_dir / "today_gdelt_report.md",
+        "api_metadata_csv": out_dir / "today_api_metadata.csv",
+        "api_report_md": out_dir / "today_api_report.md",
+        "ai_input_jsonl": out_dir / "today_ai_input.jsonl",
     }
 
     meta_path = out_dir / "today_run_meta.json"
@@ -92,7 +96,28 @@ def main() -> int:
                 run_meta_path=meta_path,
             )
 
+            db.export_today_api_metadata_csv(
+                today_paths["api_metadata_csv"], target_date_str=args.date, timezone_name=args.timezone
+            )
+            db.export_today_ai_input_jsonl(
+                today_paths["ai_input_jsonl"], target_date_str=args.date, timezone_name=args.timezone
+            )
             target_cal = str(resolve_calendar_date(args.date, args.timezone))
+            st_api_u, en_api_u = target_date_range(args.date, args.timezone)
+            api_stat = db.get_api_summary_stats(target_date_str=args.date, timezone_name=args.timezone)
+            api_err = db.api_hub_errors_by_adapter(target_date_str=args.date, timezone_name=args.timezone)
+            write_today_api_report(
+                today_paths["api_report_md"],
+                target_calendar_date=target_cal,
+                timezone_name=args.timezone,
+                window_start_utc=st_api_u,
+                window_end_utc=en_api_u,
+                counts_by_adapter=api_stat["records_by_adapter"],
+                extracted_fulltext_n=int(api_stat["api_extracted_fulltext"]),
+                api_errors_by_adapter=api_err,
+                argv=["run_export.py", "--today-only", "--date", args.date, "--timezone", args.timezone],
+            )
+
             db.export_gdelt_doc_hits_csv(
                 today_paths["gdelt_metadata_csv"], target_calendar_date=target_cal, timezone_name=args.timezone
             )

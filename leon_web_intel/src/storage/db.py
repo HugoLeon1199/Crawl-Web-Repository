@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -142,6 +143,29 @@ CREATE TABLE IF NOT EXISTS source_health (
   last_error_type TEXT,
   success_rate DOUBLE,
   updated_at TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS api_records (
+  id TEXT PRIMARY KEY,
+  api_name TEXT NOT NULL,
+  source_id TEXT,
+  record_type TEXT,
+  title TEXT,
+  url TEXT NOT NULL,
+  published_at TEXT,
+  updated_at TEXT,
+  summary TEXT,
+  content TEXT,
+  language TEXT,
+  domain TEXT,
+  country TEXT,
+  authors_json TEXT,
+  raw_metadata TEXT,
+  discovery_method TEXT,
+  content_hash TEXT,
+  collected_at TIMESTAMP,
+  target_calendar_date TEXT,
+  timezone_name TEXT
 );
 
 CREATE TABLE IF NOT EXISTS gdelt_doc_hits (
@@ -721,6 +745,14 @@ class WebIntelDB:
                 """,
                 [start_utc, end_utc],
             ).fetchone()[0]
+            distinct_article_sources = self.conn.execute(
+                """
+                SELECT COUNT(DISTINCT source_id)
+                FROM articles
+                WHERE extracted_at >= ? AND extracted_at < ?
+                """,
+                [start_utc, end_utc],
+            ).fetchone()[0]
         by_type: dict[str, int] = {}
         if not err_df.empty:
             by_type = {str(r["error_type"]): int(r["n"]) for _, r in err_df.iterrows()}
@@ -747,6 +779,7 @@ class WebIntelDB:
             "access_control_window": int(access_n or 0),
             "articles_by_strategy": strat_counts,
             "top_sources_today": [{"source_id": a, "count": b} for a, b in top_sources_rows],
+            "distinct_article_sources_today": int(distinct_article_sources or 0),
         }
 
     def export_today_articles_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
@@ -919,6 +952,253 @@ class WebIntelDB:
                 [target_calendar_date, timezone_name],
             ).fetchone()[0]
         return {"extracted_linked": int(ok or 0), "extract_errors_logged": int(bad or 0)}
+
+    def delete_api_records_for_calendar_day(self, *, target_calendar_date: str, timezone_name: str) -> None:
+        with self._lock:
+            self.conn.execute(
+                "DELETE FROM api_records WHERE target_calendar_date = ? AND timezone_name = ?",
+                [target_calendar_date, timezone_name],
+            )
+
+    def upsert_api_record(self, row: dict[str, Any]) -> None:
+        with self._lock:
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(["?" for _ in row])
+            sql = f"INSERT OR REPLACE INTO api_records ({cols}) VALUES ({placeholders})"
+            self.conn.execute(sql, list(row.values()))
+
+    def insert_api_record(self, row: dict[str, Any]) -> None:
+        self.upsert_api_record(row)
+
+    def fetch_today_api_records(self, *, target_date_str: str | None, timezone_name: str) -> list[dict[str, Any]]:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT *
+                FROM api_records
+                WHERE collected_at >= ? AND collected_at < ?
+                ORDER BY api_name, url
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+        if df.empty:
+            return []
+        return df.to_dict("records")
+
+    def fetch_today_api_headlines(
+        self, *, target_date_str: str | None, timezone_name: str, limit: int = 50
+    ) -> list[dict[str, Any]]:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT api_name, title, url, published_at
+                FROM api_records
+                WHERE collected_at >= ? AND collected_at < ?
+                ORDER BY collected_at DESC
+                LIMIT ?
+                """,
+                [start_utc, end_utc, limit],
+            ).fetchdf()
+        if df.empty:
+            return []
+        return df.to_dict("records")
+
+    def export_today_api_records_jsonl(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        rows = self.fetch_today_api_records(target_date_str=target_date_str, timezone_name=timezone_name)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with out_path.open("w", encoding="utf-8") as fh:
+            for row in rows:
+                fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+
+    def get_api_summary_stats(self, *, target_date_str: str | None, timezone_name: str) -> dict[str, Any]:
+        by_adapter = self.count_api_records_by_adapter(target_date_str=target_date_str, timezone_name=timezone_name)
+        total = int(sum(by_adapter.values()))
+        return {
+            "records_by_adapter": by_adapter,
+            "total_api_records_window": total,
+            "api_extracted_fulltext": self.count_api_extracted_articles(
+                target_date_str=target_date_str, timezone_name=timezone_name
+            ),
+            "api_hub_errors_by_adapter": self.api_hub_errors_by_adapter(
+                target_date_str=target_date_str, timezone_name=timezone_name
+            ),
+        }
+
+    def count_api_records_by_adapter(
+        self, *, target_date_str: str | None, timezone_name: str
+    ) -> dict[str, int]:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT api_name, COUNT(*) AS n
+                FROM api_records
+                WHERE collected_at >= ? AND collected_at < ?
+                GROUP BY api_name
+                ORDER BY api_name
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+        if df.empty:
+            return {}
+        return {str(r["api_name"]): int(r["n"]) for _, r in df.iterrows()}
+
+    def count_api_extracted_articles(self, *, target_date_str: str | None, timezone_name: str) -> int:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            row = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM articles
+                WHERE crawl_strategy_used = 'api_trafilatura_extract'
+                  AND extracted_at >= ? AND extracted_at < ?
+                """,
+                [start_utc, end_utc],
+            ).fetchone()
+            return int(row[0] or 0)
+
+    def count_articles_with_body_in_window(self, *, target_date_str: str | None, timezone_name: str) -> int:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            row = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM articles
+                WHERE extracted_at >= ? AND extracted_at < ?
+                  AND content IS NOT NULL AND LENGTH(TRIM(content)) > 200
+                """,
+                [start_utc, end_utc],
+            ).fetchone()
+            return int(row[0] or 0)
+
+    def count_errors_by_type_window(self, *, target_date_str: str | None, timezone_name: str) -> dict[str, int]:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT error_type, COUNT(*) AS n
+                FROM crawl_errors
+                WHERE created_at >= ? AND created_at < ?
+                GROUP BY error_type
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+        if df.empty:
+            return {}
+        return {str(r["error_type"]): int(r["n"]) for _, r in df.iterrows()}
+
+    def api_hub_errors_by_adapter(self, *, target_date_str: str | None, timezone_name: str) -> dict[str, int]:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT stage, COUNT(*) AS n
+                FROM crawl_errors
+                WHERE created_at >= ? AND created_at < ?
+                  AND stage LIKE 'api_hub:%'
+                GROUP BY stage
+                ORDER BY stage
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+        out: dict[str, int] = {}
+        if df.empty:
+            return out
+        for _, r in df.iterrows():
+            st = str(r["stage"])
+            adapter = st.split(":", 1)[-1] if ":" in st else st
+            out[adapter] = int(r["n"])
+        return out
+
+    def export_today_api_metadata_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT api_name, source_id, record_type, title, url, published_at, updated_at,
+                       language, domain, country, authors_json, discovery_method, content_hash, collected_at
+                FROM api_records
+                WHERE collected_at >= ? AND collected_at < ?
+                ORDER BY api_name, url
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_path, index=False)
+
+    def export_today_ai_input_jsonl(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        """Full-text merge for local AI pipelines (do not commit if policy forbids)."""
+
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        rows_out: list[dict[str, Any]] = []
+        with self._lock:
+            art_df = self.conn.execute(
+                """
+                SELECT id, source_id, title, url, published_at, language, content, content_length,
+                       quality_score, crawl_strategy_used
+                FROM articles
+                WHERE extracted_at >= ? AND extracted_at < ?
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+            api_df = self.conn.execute(
+                """
+                SELECT id, api_name, source_id, record_type, title, url, published_at, language,
+                       content, summary, content_hash
+                FROM api_records
+                WHERE collected_at >= ? AND collected_at < ?
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+        for _, r in art_df.iterrows():
+            content = r.get("content")
+            clen = int(r.get("content_length") or 0) if r.get("content_length") is not None else len(str(content or ""))
+            rows_out.append(
+                {
+                    "id": str(r["id"]),
+                    "source_type": "scrapy",
+                    "api_name": "",
+                    "source_id": str(r.get("source_id") or ""),
+                    "title": str(r.get("title") or ""),
+                    "url": str(r.get("url") or ""),
+                    "published_at": str(r.get("published_at") or ""),
+                    "language": str(r.get("language") or ""),
+                    "content": content,
+                    "summary": None,
+                    "content_length": clen,
+                    "quality_score": float(r["quality_score"]) if r.get("quality_score") is not None else None,
+                    "crawl_strategy_used": str(r.get("crawl_strategy_used") or ""),
+                    "record_type": "article",
+                    "content_hash": None,
+                }
+            )
+        for _, r in api_df.iterrows():
+            summ = r.get("summary")
+            body = r.get("content")
+            text = body if isinstance(body, str) and body.strip() else summ
+            rows_out.append(
+                {
+                    "id": str(r["id"]),
+                    "source_type": "api",
+                    "api_name": str(r.get("api_name") or ""),
+                    "source_id": str(r.get("source_id") or ""),
+                    "title": str(r.get("title") or ""),
+                    "url": str(r.get("url") or ""),
+                    "published_at": str(r.get("published_at") or ""),
+                    "language": str(r.get("language") or ""),
+                    "content": text,
+                    "summary": str(summ) if summ else None,
+                    "content_length": len(str(text or "")),
+                    "quality_score": None,
+                    "crawl_strategy_used": "api_record",
+                    "record_type": str(r.get("record_type") or ""),
+                    "content_hash": str(r.get("content_hash") or ""),
+                }
+            )
+        with out_path.open("w", encoding="utf-8") as fh:
+            for obj in rows_out:
+                fh.write(json.dumps(obj, ensure_ascii=False, default=str) + "\n")
 
 
 def new_id() -> str:

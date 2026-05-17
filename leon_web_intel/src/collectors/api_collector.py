@@ -1,4 +1,8 @@
-"""Placeholder collectors for known API sources."""
+"""Legacy placeholder markers for known API domains.
+
+Production API ingestion runs through ``run_api_today.py`` (API Hub v1) and
+``collectors/api_adapters/``. This module remains for lightweight discovery hints only.
+"""
 
 from __future__ import annotations
 

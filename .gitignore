@@ -6,6 +6,9 @@ leon_web_intel/data/cache/
 leon_web_intel/data/raw/
 leon_web_intel/data/db/*.duckdb
 leon_web_intel/logs/
+leon_web_intel/data/exports/today_ai_input.jsonl
+leon_web_intel/data/exports/today_articles.csv
+leon_web_intel/data/exports/today_articles.parquet
 **/__pycache__/
 .pytest_cache/
 *.py[cod]
