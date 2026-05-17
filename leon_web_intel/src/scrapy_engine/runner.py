@@ -46,6 +46,10 @@ def run_scrapy_engine(
     db_path: Path | None = None,
     run_id: str | None = None,
     close_spider_timeout: int = 600,
+    today_only: bool = False,
+    target_date: str = "today",
+    timezone_name: str = "Europe/Amsterdam",
+    max_urls_per_source: int = 1000,
 ) -> ScrapyRunSummary:
     """Execute Scrapy lane(s). Uses CrawlerProcess for reliable teardown (esp. Windows)."""
     _ = run_id  # Stored at the orchestration layer for this phase.
@@ -70,6 +74,9 @@ def run_scrapy_engine(
         raw_root=raw_root,
         summary=summary,
         closespider_timeout=close_spider_timeout,
+        today_only=today_only,
+        target_date=target_date,
+        timezone_name=timezone_name,
     )
 
     configure_logging(settings={"LOG_LEVEL": settings.get("LOG_LEVEL")})
@@ -81,6 +88,10 @@ def run_scrapy_engine(
             sources=buckets["rss"],
             max_articles_per_source=max_articles_per_source,
             summary=summary,
+            today_only=today_only,
+            target_date=target_date,
+            timezone=timezone_name,
+            max_urls_per_source=max_urls_per_source,
         )
     if buckets["sitemap"]:
         process.crawl(
@@ -88,13 +99,23 @@ def run_scrapy_engine(
             sources=buckets["sitemap"],
             max_articles_per_source=max_articles_per_source,
             summary=summary,
+            today_only=today_only,
+            target_date=target_date,
+            timezone=timezone_name,
+            max_urls_per_source=max_urls_per_source,
         )
     if buckets["html"]:
+        html_cap = min(300, max_urls_per_source) if today_only else max_articles_per_source
         process.crawl(
             HtmlArticleSpider,
             sources=buckets["html"],
             max_articles_per_source=max_articles_per_source,
             summary=summary,
+            today_only=today_only,
+            target_date=target_date,
+            timezone=timezone_name,
+            max_urls_per_source=html_cap,
+            max_depth=2,
         )
 
     process.start()

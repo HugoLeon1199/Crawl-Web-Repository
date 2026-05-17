@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import scrapy
 
 from scrapy_engine.items import ArticleItem
+from utils.today_filter import is_url_likely_today, resolve_calendar_date
+
+
+def _article_like_url(url: str) -> bool:
+    u = url.lower()
+    needles = ("/news/", "/article/", "/story/", "/topics/", "/world/", "/politics/", "/business/", "/sport/", "/20")
+    return any(n in u for n in needles)
 
 
 class HtmlArticleSpider(scrapy.Spider):
@@ -21,6 +29,10 @@ class HtmlArticleSpider(scrapy.Spider):
         crawl_strategy: str = "html_then_trafilatura",
         max_depth: int = 2,
         max_links_per_page: int = 40,
+        today_only: bool = False,
+        target_date: str | None = None,
+        timezone: str = "Europe/Amsterdam",
+        max_urls_per_source: int = 300,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -30,6 +42,10 @@ class HtmlArticleSpider(scrapy.Spider):
         self.crawl_strategy = crawl_strategy
         self.max_depth = int(max_depth)
         self.max_links_per_page = int(max_links_per_page)
+        self.today_only = bool(today_only)
+        self.target_date_str = target_date
+        self.timezone_str = str(timezone or "Europe/Amsterdam")
+        self.max_urls_per_source = int(max_urls_per_source)
         self._attempted: dict[str, int] = {}
         self._reserved: dict[str, int] = {}
 
@@ -37,6 +53,9 @@ class HtmlArticleSpider(scrapy.Spider):
         if self.summary:
             with self.summary.lock:
                 self.summary.requests_scheduled += n
+
+    def _cap(self, sid: str) -> int:
+        return self.max_urls_per_source if self.today_only else self.max_articles_per_source
 
     def _host_key(self, netloc: str) -> str:
         host = netloc.lower()
@@ -49,6 +68,9 @@ class HtmlArticleSpider(scrapy.Spider):
         hb = self._host_key(urlparse(b).netloc)
         return bool(ha and hb and ha == hb)
 
+    def _target_date_obj(self):
+        return resolve_calendar_date(self.target_date_str, self.timezone_str)
+
     def start_requests(self) -> Any:
         for row in self.sources:
             sid = row["source_id"]
@@ -57,7 +79,7 @@ class HtmlArticleSpider(scrapy.Spider):
             home = row["_homepage_url"]
             if not home:
                 continue
-            if self._reserved[sid] >= self.max_articles_per_source:
+            if self._reserved[sid] >= self._cap(sid):
                 continue
             active = row.get("_source_active", True)
             self._reserved[sid] += 1
@@ -74,11 +96,13 @@ class HtmlArticleSpider(scrapy.Spider):
         sid = response.meta["source_id"]
         depth = int(response.meta["depth"])
         active = response.meta.get("source_active", True)
+        target_d = self._target_date_obj() if self.today_only else None
 
-        if self._attempted.get(sid, 0) >= self.max_articles_per_source:
+        if self._attempted.get(sid, 0) >= self._cap(sid):
             return
 
         self._attempted[sid] = self._attempted.get(sid, 0) + 1
+        td = str(target_d) if self.today_only else None
         yield ArticleItem(
             source_id=sid,
             url=response.url,
@@ -86,9 +110,14 @@ class HtmlArticleSpider(scrapy.Spider):
             html_body=response.body,
             response_status=response.status,
             source_active=active,
+            discovery_source="html",
+            target_date=td,
+            is_today_candidate=bool(self.today_only),
+            candidate_published_at=None,
+            discovered_at=datetime.now(timezone.utc).isoformat(),
         )
 
-        if self._attempted.get(sid, 0) >= self.max_articles_per_source:
+        if self._attempted.get(sid, 0) >= self._cap(sid):
             return
 
         if depth >= self.max_depth:
@@ -96,7 +125,7 @@ class HtmlArticleSpider(scrapy.Spider):
 
         links = response.css("a::attr(href)").getall()[: self.max_links_per_page]
         for href in links:
-            if self._reserved.get(sid, 0) >= self.max_articles_per_source:
+            if self._reserved.get(sid, 0) >= self._cap(sid):
                 break
             if not href or href.startswith(("#", "mailto:", "javascript:", "tel:")):
                 continue
@@ -105,6 +134,17 @@ class HtmlArticleSpider(scrapy.Spider):
                 continue
             if not self._same_registrable_host(abs_u, response.url):
                 continue
+
+            if self.today_only and target_d is not None:
+                follow = False
+                if depth == 0:
+                    follow = True
+                elif is_url_likely_today(abs_u, target_d):
+                    follow = True
+                elif depth == 1 and _article_like_url(abs_u):
+                    follow = True
+                if not follow:
+                    continue
             self._reserved[sid] += 1
             self._sched(1)
             yield scrapy.Request(

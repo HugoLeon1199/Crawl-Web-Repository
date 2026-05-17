@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import gzip
 import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
 import scrapy
 
 from scrapy_engine.items import ArticleItem
+from utils.today_filter import (
+    is_datetime_in_range,
+    is_url_likely_today,
+    parse_any_datetime,
+    resolve_calendar_date,
+    target_date_range,
+)
 
 
 def _local(tag: str) -> str:
@@ -27,6 +35,50 @@ def _iter_locs(body: bytes) -> list[str]:
             u = el.text.strip()
             if u:
                 out.append(u)
+    return out
+
+
+def _iter_sitemap_pairs(body: bytes) -> list[tuple[str, str | None]]:
+    """``(loc, lastmod)`` pairs from urlset or sitemap index."""
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return []
+    out: list[tuple[str, str | None]] = []
+    root_name = _local(root.tag or "").lower()
+
+    if root_name == "sitemapindex":
+        for el in root:
+            if _local(el.tag).lower() != "sitemap":
+                continue
+            loc = None
+            lm = None
+            for ch in el:
+                ln = _local(ch.tag).lower()
+                if ln == "loc" and ch.text:
+                    loc = ch.text.strip()
+                elif ln == "lastmod" and ch.text:
+                    lm = ch.text.strip()
+            if loc:
+                out.append((loc, lm))
+        return out
+
+    for el in root.iter():
+        if _local(el.tag).lower() != "url":
+            continue
+        loc = None
+        lm = None
+        for ch in el:
+            ln = _local(ch.tag).lower()
+            if ln == "loc" and ch.text:
+                loc = ch.text.strip()
+            elif ln == "lastmod" and ch.text:
+                lm = ch.text.strip()
+        if loc:
+            out.append((loc, lm))
+
+    if not out:
+        return [(u, None) for u in _iter_locs(body)]
     return out
 
 
@@ -53,6 +105,10 @@ class SitemapArticleSpider(scrapy.Spider):
         summary: Any | None = None,
         crawl_strategy: str = "sitemap_then_article_extract",
         max_sitemap_nested: int = 3,
+        today_only: bool = False,
+        target_date: str | None = None,
+        timezone: str = "Europe/Amsterdam",
+        max_urls_per_source: int = 1000,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
@@ -61,12 +117,21 @@ class SitemapArticleSpider(scrapy.Spider):
         self.summary = summary
         self.crawl_strategy = crawl_strategy
         self.max_sitemap_nested = int(max_sitemap_nested)
+        self.today_only = bool(today_only)
+        self.target_date_str = target_date
+        self.timezone_str = str(timezone or "Europe/Amsterdam")
+        self.max_urls_per_source = int(max_urls_per_source)
         self._reserved: dict[str, int] = {}
 
     def _sched(self, n: int = 1) -> None:
         if self.summary:
             with self.summary.lock:
                 self.summary.requests_scheduled += n
+
+    def _cap_for_source(self, sid: str) -> int:
+        if self.today_only:
+            return self.max_urls_per_source
+        return self.max_articles_per_source
 
     def start_requests(self) -> Any:
         for row in self.sources:
@@ -100,13 +165,19 @@ class SitemapArticleSpider(scrapy.Spider):
         domain_host = (response.meta.get("domain_host") or "").lower()
 
         raw = _maybe_decompress(response)
-        locs = _iter_locs(raw)
-        remaining = self.max_articles_per_source - self._reserved.get(sid, 0)
+        pairs = _iter_sitemap_pairs(raw)
+        remaining = self._cap_for_source(sid) - self._reserved.get(sid, 0)
         if remaining <= 0:
             return
 
-        for loc in locs:
-            if remaining <= 0:
+        start_utc = end_utc = None
+        target_d = None
+        if self.today_only:
+            start_utc, end_utc = target_date_range(self.target_date_str, self.timezone_str)
+            target_d = resolve_calendar_date(self.target_date_str, self.timezone_str)
+
+        for loc, lastmod in pairs:
+            if self._reserved.get(sid, 0) >= self._cap_for_source(sid):
                 break
             parsed = urlparse(loc)
             child_host = parsed.netloc.lower()
@@ -132,14 +203,30 @@ class SitemapArticleSpider(scrapy.Spider):
             if not loc.startswith("http"):
                 continue
 
+            cand_raw = lastmod
+            lm_dt = parse_any_datetime(lastmod) if lastmod else None
+
+            if self.today_only and start_utc and end_utc and target_d:
+                include = False
+                if lm_dt and is_datetime_in_range(lm_dt, start_utc, end_utc):
+                    include = True
+                elif lm_dt is None and is_url_likely_today(loc, target_d):
+                    include = True
+                elif lm_dt and not is_datetime_in_range(lm_dt, start_utc, end_utc):
+                    include = False
+                elif is_url_likely_today(loc, target_d):
+                    include = True
+                if not include:
+                    continue
+
             self._reserved[sid] = self._reserved.get(sid, 0) + 1
-            remaining -= 1
             self._sched(1)
+            meta = {"source_id": sid, "source_active": active, "candidate_published_at": cand_raw}
             yield scrapy.Request(
                 loc,
                 callback=self.parse_article,
                 errback=self.errback,
-                meta={"source_id": sid, "source_active": active},
+                meta=meta,
                 dont_filter=False,
             )
 
@@ -147,7 +234,6 @@ class SitemapArticleSpider(scrapy.Spider):
         sid = response.meta["source_id"]
         ctype = (response.headers.get(b"Content-Type") or b"").decode("latin-1", errors="ignore").lower()
         if "xml" in ctype or response.url.lower().endswith(".xml"):
-            # Navigated to a document page that is still XML — skip without crashing
             yield ArticleItem(
                 source_id=sid,
                 url=response.url,
@@ -159,6 +245,10 @@ class SitemapArticleSpider(scrapy.Spider):
             )
             return
 
+        td = None
+        if self.today_only:
+            td = str(resolve_calendar_date(self.target_date_str, self.timezone_str))
+
         yield ArticleItem(
             source_id=sid,
             url=response.url,
@@ -166,6 +256,11 @@ class SitemapArticleSpider(scrapy.Spider):
             html_body=response.body,
             response_status=response.status,
             source_active=response.meta.get("source_active", True),
+            candidate_published_at=response.meta.get("candidate_published_at"),
+            discovery_source="sitemap",
+            target_date=td,
+            is_today_candidate=bool(self.today_only),
+            discovered_at=datetime.now(timezone.utc).isoformat(),
         )
 
     def errback(self, failure: Any) -> Any:

@@ -11,6 +11,13 @@ from typing import Any
 import duckdb
 
 from utils.hashing import sha256_text
+from utils.today_filter import (
+    is_datetime_in_range,
+    is_url_likely_today,
+    parse_any_datetime,
+    resolve_calendar_date,
+    target_date_range,
+)
 
 
 DDL = """
@@ -598,6 +605,188 @@ class WebIntelDB:
             """
             df = self.conn.execute(sql).fetchdf()
             df.to_csv(out_path, index=False)
+
+    def fetch_today_articles(
+        self,
+        *,
+        target_date_str: str | None,
+        timezone_name: str,
+    ) -> list[dict[str, Any]]:
+        """Articles whose publication day matches target (timezone) or fallback rules."""
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        target_d = resolve_calendar_date(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute("SELECT * FROM articles ORDER BY extracted_at, id").fetchdf()
+        rows = df.to_dict("records")
+        out: list[dict[str, Any]] = []
+        for row in rows:
+            url = str(row.get("url") or "")
+            pub_raw = row.get("published_at")
+            pub_dt = parse_any_datetime(str(pub_raw)) if pub_raw is not None else None
+            ext = row.get("extracted_at")
+            ext_dt: datetime | None = None
+            if ext is not None:
+                try:
+                    ext_dt = ext.to_pydatetime() if hasattr(ext, "to_pydatetime") else datetime.fromisoformat(str(ext))
+                    if ext_dt.tzinfo is None:
+                        ext_dt = ext_dt.replace(tzinfo=timezone.utc)
+                    ext_dt = ext_dt.astimezone(timezone.utc)
+                except (ValueError, TypeError):
+                    ext_dt = None
+
+            if pub_dt and is_datetime_in_range(pub_dt, start_utc, end_utc):
+                out.append(row)
+                continue
+            if pub_raw is None or str(pub_raw).strip() == "":
+                if ext_dt and is_datetime_in_range(ext_dt, start_utc, end_utc) and is_url_likely_today(url, target_d):
+                    out.append(row)
+                    continue
+                continue
+            # Had published string but outside range
+            if pub_dt and not is_datetime_in_range(pub_dt, start_utc, end_utc):
+                continue
+            # Unparseable published_at: treat like missing
+            if ext_dt and is_datetime_in_range(ext_dt, start_utc, end_utc) and is_url_likely_today(url, target_d):
+                out.append(row)
+        return out
+
+    def get_today_summary_stats(
+        self,
+        *,
+        target_date_str: str | None,
+        timezone_name: str,
+    ) -> dict[str, Any]:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        articles = self.fetch_today_articles(target_date_str=target_date_str, timezone_name=timezone_name)
+        with self._lock:
+            err_df = self.conn.execute(
+                """
+                SELECT error_type, COUNT(*) AS n
+                FROM crawl_errors
+                WHERE created_at >= ? AND created_at < ?
+                GROUP BY error_type
+                ORDER BY n DESC
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+            frontier_skip = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM crawl_frontier
+                WHERE status = 'skipped'
+                  AND last_error_type = 'NotToday'
+                  AND last_seen_at >= ? AND last_seen_at < ?
+                """,
+                [start_utc, end_utc],
+            ).fetchone()[0]
+            access_n = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM crawl_errors
+                WHERE error_type = 'AccessControlDetected'
+                  AND created_at >= ? AND created_at < ?
+                """,
+                [start_utc, end_utc],
+            ).fetchone()[0]
+            not_today_err = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM crawl_errors
+                WHERE error_type = 'NotToday'
+                  AND created_at >= ? AND created_at < ?
+                """,
+                [start_utc, end_utc],
+            ).fetchone()[0]
+        by_type: dict[str, int] = {}
+        if not err_df.empty:
+            by_type = {str(r["error_type"]): int(r["n"]) for _, r in err_df.iterrows()}
+        strat_counts: dict[str, int] = {}
+        for r in articles:
+            k = str(r.get("crawl_strategy_used") or "unknown")
+            strat_counts[k] = strat_counts.get(k, 0) + 1
+        top_sources: dict[str, int] = {}
+        for r in articles:
+            sid = str(r.get("source_id") or "")
+            top_sources[sid] = top_sources.get(sid, 0) + 1
+        top_sources_rows = sorted(top_sources.items(), key=lambda x: (-x[1], x[0]))[:10]
+        return {
+            "target_date": str(resolve_calendar_date(target_date_str, timezone_name)),
+            "timezone": timezone_name,
+            "window_start_utc": start_utc,
+            "window_end_utc": end_utc,
+            "today_article_count": len(articles),
+            "today_articles": articles,
+            "errors_by_type_window": by_type,
+            "total_errors_window": int(sum(by_type.values())),
+            "not_today_skipped_frontier": int(frontier_skip or 0),
+            "not_today_errors": int(not_today_err or 0),
+            "access_control_window": int(access_n or 0),
+            "articles_by_strategy": strat_counts,
+            "top_sources_today": [{"source_id": a, "count": b} for a, b in top_sources_rows],
+        }
+
+    def export_today_articles_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        import pandas as pd
+
+        rows = self.fetch_today_articles(target_date_str=target_date_str, timezone_name=timezone_name)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(rows).to_csv(out_path, index=False)
+
+    def export_today_articles_parquet(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        import pandas as pd
+
+        rows = self.fetch_today_articles(target_date_str=target_date_str, timezone_name=timezone_name)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame(rows).to_parquet(out_path, index=False)
+
+    def export_today_errors_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT * FROM crawl_errors
+                WHERE created_at >= ? AND created_at < ?
+                ORDER BY created_at, id
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_path, index=False)
+
+    def export_today_frontier_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT * FROM crawl_frontier
+                WHERE last_seen_at >= ? AND last_seen_at < ?
+                ORDER BY last_seen_at, url_hash
+                """,
+                [start_utc, end_utc],
+            ).fetchdf()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_path, index=False)
+
+    def export_today_source_health_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT sh.*
+                FROM source_health sh
+                WHERE sh.source_id IN (
+                  SELECT DISTINCT source_id FROM articles
+                  WHERE extracted_at >= ? AND extracted_at < ?
+                  UNION
+                  SELECT DISTINCT source_id FROM crawl_errors
+                  WHERE created_at >= ? AND created_at < ?
+                  UNION
+                  SELECT DISTINCT source_id FROM crawl_frontier
+                  WHERE last_seen_at >= ? AND last_seen_at < ?
+                )
+                ORDER BY sh.source_id
+                """,
+                [start_utc, end_utc, start_utc, end_utc, start_utc, end_utc],
+            ).fetchdf()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_path, index=False)
 
 
 def new_id() -> str:

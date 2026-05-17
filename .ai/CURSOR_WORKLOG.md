@@ -3,6 +3,77 @@
 **Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
 **Project:** Leon Global Web Intelligence Engine  
 
+## Current session (2026-05-17) — TODAY FULL ARTICLE CRAWL MODE (public discovery)
+
+### Goal
+
+Chuyển từ sample crawl sang **lấy toàn bộ bài có thể phát hiện công khai trong một ngày** (RSS dates / sitemap `lastmod` / HTML có giới hạn), có **`--timezone`** và **`--date`**, không bypass governance.
+
+### Files created
+
+- `leon_web_intel/src/utils/today_filter.py` — parse dates (RSS/ISO/RFC822/W3CDTF/YYYY-MM-DD), `target_date_range`, URL ngày trong path.  
+- `leon_web_intel/run_today.py` — orchestrator profile → `run_scrapy.py --today-only` → `run_export.py --today-only`.  
+- `leon_web_intel/tests/test_today_mode.py` — offline tests (RSS/sitemap/URL/export/report/command building).
+
+### Files modified
+
+- `leon_web_intel/src/scrapy_engine/items.py` — `discovered_at`, `candidate_published_at`, `discovery_source`, `target_date`, `is_today_candidate`.  
+- `leon_web_intel/src/scrapy_engine/spiders/rss_article_spider.py` — today filter + `max_urls_per_source`.  
+- `leon_web_intel/src/scrapy_engine/spiders/sitemap_article_spider.py` — `loc`+`lastmod` parsing, today filter.  
+- `leon_web_intel/src/scrapy_engine/spiders/html_article_spider.py` — today discovery + caps (`max_urls_per_source`, depth 2).  
+- `leon_web_intel/src/scrapy_engine/pipelines.py` — after extract: gate inserts with **NotToday** / **PublishedDateMissingLikelyToday**; đọc `WEB_INTEL_*` settings.  
+- `leon_web_intel/src/scrapy_engine/settings.py`, `runner.py`, `run_scrapy.py` — `--today-only`, `--date`, `--timezone`, `--max-urls-per-source`.  
+- `leon_web_intel/run_export.py` — `--today-only` → `today_*.csv|parquet|md`.  
+- `leon_web_intel/src/reporting/crawl_report.py` — `write_today_crawl_report`.  
+- `leon_web_intel/src/storage/db.py` — `fetch_today_articles`, `get_today_summary_stats`, `export_today_*`.  
+- `leon_web_intel/tests/test_scrapy_layer.py` — assert default `WEB_INTEL_*` keys.  
+- `leon_web_intel/README.md` — mục **TODAY FULL ARTICLE CRAWL**.  
+- `.ai/CURSOR_WORKLOG.md` — mục này.
+
+### Commands run
+
+Interpreter: `D:\cursor\LEONCODE\CRAWL WEB\.tools\nuget_packages\python.3.11.9\tools\python.exe` (cwd `leon_web_intel`).
+
+| Command | Result |
+|---------|--------|
+| `python -m pytest -v --tb=short` | **36 passed** (~4s) |
+| `python run_today.py --input config/sources_raw.txt --strategy rss --date 2026-05-17 --timezone Europe/Amsterdam --profile-limit 12 --max-urls-per-source 100 --step-timeout-seconds 900 --close-spider-timeout 600 --force-refresh` | **Exit 0** — smoke (nhỏ hơn `--profile-limit 198` đầy đủ để agent kịp trong phiên) |
+
+### Target ngày / timezone
+
+- **`2026-05-17`** · **`Europe/Amsterdam`** (UTC window báo cáo: `2026-05-16 22:00 UTC` → `2026-05-17 22:00 UTC`)
+
+### Run audit (smoke)
+
+- **Run ID:** `5499a61b-9624-4884-9a9a-cf3f1930dc1c` — status **success**  
+- **Today articles** (filter export): **0** — các URL RSS trong ngày vẫn bị **keyword governance** (`AccessControlDetected`) trên phần lớn domain tin lớn trong DB hiện tại.  
+- **Errors (UTC window trong `today_final_report`):** **79** — toàn **AccessControlDetected**  
+- **NotToday** (`crawl_errors` trong cửa sổ): **0**  
+- **Frontier skipped NotToday** (trong cửa sổ): **0**  
+- **AccessControlDetected:** **79**  
+
+### Outputs
+
+- `leon_web_intel/data/exports/today_articles.csv`  
+- `leon_web_intel/data/exports/today_articles.parquet`  
+- `leon_web_intel/data/exports/today_crawl_errors.csv`  
+- `leon_web_intel/data/exports/today_crawl_frontier.csv`  
+- `leon_web_intel/data/exports/today_source_health.csv`  
+- `leon_web_intel/data/exports/today_final_report.md`  
+
+### Top articles / URLs
+
+- Không có hàng nào trong bảng Top Articles của `today_final_report.md` (**0** today rows sau filter).
+
+### Timeout / hang
+
+- **Không hang:** Scrapy ~**78s**, pipeline smoke ~**97s** tổng.  
+- Để chạy đúng như spec đầy đủ:  
+  `python run_today.py --input config/sources_raw.txt --strategy rss --date today --timezone Europe/Amsterdam --profile-limit 198 --max-urls-per-source 1000 --step-timeout-seconds 1800 --close-spider-timeout 1200`  
+  rồi (nếu RSS ổn) `--strategy all` với timeout cao hơn như README.
+
+---
+
 ## Current session (2026-05-17) — RSS scale batch limit 30 (pytest + pipeline)
 
 Chỉ kiểm tra scale nhỏ–vừa: **RSS**, `--limit 30`, không đổi code (không có lỗi implementation).

@@ -4,6 +4,11 @@ import scrapy
 class ArticleItem(scrapy.Item):
     source_id = scrapy.Field()
     url = scrapy.Field()
+    discovered_at = scrapy.Field()
+    candidate_published_at = scrapy.Field()
+    discovery_source = scrapy.Field()
+    target_date = scrapy.Field()
+    is_today_candidate = scrapy.Field()
     title = scrapy.Field()
     published_at = scrapy.Field()
     content = scrapy.Field()

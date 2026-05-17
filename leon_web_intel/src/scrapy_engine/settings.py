@@ -17,6 +17,9 @@ def build_scrapy_settings_dict(
     raw_root: Path,
     summary: object,
     closespider_timeout: int = 600,
+    today_only: bool = False,
+    target_date: str = "today",
+    timezone_name: str = "Europe/Amsterdam",
 ) -> dict:
     """Project-style overrides; merged into Scrapy ``Settings``."""
     return {
@@ -43,6 +46,9 @@ def build_scrapy_settings_dict(
         "WEB_INTEL_RAW_ROOT": str(raw_root.resolve()),
         "WEB_INTEL_SUMMARY": summary,
         "WEB_INTEL_MIN_ARTICLE_LENGTH": rules.min_article_content_length,
+        "WEB_INTEL_TODAY_ONLY": bool(today_only),
+        "WEB_INTEL_TARGET_DATE": str(target_date),
+        "WEB_INTEL_TIMEZONE": str(timezone_name),
     }
 
 
@@ -54,6 +60,9 @@ def build_scrapy_settings(
     raw_root: Path,
     summary: object,
     closespider_timeout: int = 600,
+    today_only: bool = False,
+    target_date: str = "today",
+    timezone_name: str = "Europe/Amsterdam",
 ) -> Settings:
     s = Settings()
     s.setdict(
@@ -64,6 +73,9 @@ def build_scrapy_settings(
             raw_root=raw_root,
             summary=summary,
             closespider_timeout=closespider_timeout,
+            today_only=today_only,
+            target_date=target_date,
+            timezone_name=timezone_name,
         ),
         priority="cmdline",
     )

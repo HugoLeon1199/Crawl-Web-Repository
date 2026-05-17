@@ -1,6 +1,6 @@
 # Leon Global Web Intelligence Engine (v1)
 
-Local-first pipeline to **profile hundreds of web sources** without hand-labeling fetch strategies, then run a **small sample crawl** per detected strategy. Outputs land in **DuckDB**, **CSV/Parquet**, and **Markdown** summaries.
+Local-first pipeline to **profile hundreds of web sources** without hand-labeling fetch strategies, then run **bounded production crawls** or a **timezone-aware “today” mode** that collects every publicly discoverable article for a calendar day (RSS / sitemap / bounded HTML). Outputs land in **DuckDB**, **CSV/Parquet**, and **Markdown** summaries.
 
 ## Installation
 
@@ -74,6 +74,41 @@ Lanes:
 Scrapy respects **`ROBOTSTXT_OBEY = True`**, uses **User-Agent / timeout / retries / delay** from `config/crawl_rules.yaml`, keeps **low per-domain concurrency**, and does **not** bypass paywall, login, or CAPTCHA (keyword gates match v1; blocked pages log `AccessControlDetected` without persisting full article content).
 
 Skipped in this phase (sources are not loaded for Scrapy): `api_first`, `metadata_only`, `manual_review`, `playwright_fallback`. HTML lane skips sources with `robots_can_fetch_homepage = false`.
+
+## TODAY FULL ARTICLE CRAWL
+
+Collect **all publicly discoverable articles for one calendar day** per source (RSS entry dates, sitemap `lastmod`, and bounded homepage/link discovery with URL date heuristics). Governed the same way as v1: **no paywall/login/CAPTCHA bypass**, no proxy/stealth, no private content.
+
+**Primary command**
+
+```bash
+python run_today.py --input config/sources_raw.txt --strategy all --date today --timezone Europe/Amsterdam --profile-limit 198 --max-urls-per-source 1000 --step-timeout-seconds 1800 --close-spider-timeout 1200
+```
+
+Direct Scrapy (after profiling), today-only:
+
+```bash
+python run_scrapy.py --strategy all --today-only --date today --timezone Europe/Amsterdam --max-urls-per-source 1000 --close-spider-timeout 900 --limit 198
+```
+
+Today-filtered exports + report:
+
+```bash
+python run_export.py --today-only --date today --timezone Europe/Amsterdam
+```
+
+**Main outputs**
+
+| Artifact | Path |
+|----------|------|
+| Today articles CSV | `data/exports/today_articles.csv` |
+| Today articles Parquet | `data/exports/today_articles.parquet` |
+| Today crawl errors | `data/exports/today_crawl_errors.csv` |
+| Today frontier snapshot | `data/exports/today_crawl_frontier.csv` |
+| Today source health slice | `data/exports/today_source_health.csv` |
+| Today Markdown report | `data/exports/today_final_report.md` |
+
+Full-database exports (`articles.csv`, `final_crawl_report.md`, …) are still written whenever you run `run_export.py`.
 
 ## Production-ready E2E Crawl Foundation
 

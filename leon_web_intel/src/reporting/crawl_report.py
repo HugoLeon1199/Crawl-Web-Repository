@@ -8,6 +8,72 @@ from typing import Any
 from storage.db import WebIntelDB
 
 
+def write_today_crawl_report(
+    db: WebIntelDB,
+    out_path: Path,
+    *,
+    target_date: str | None,
+    timezone_name: str,
+) -> None:
+    """Markdown report focused on public-discovery \"today\" articles."""
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    stats = db.get_today_summary_stats(target_date_str=target_date, timezone_name=timezone_name)
+    articles = sorted(
+        stats["today_articles"],
+        key=lambda r: (float(r.get("quality_score") or 0), str(r.get("title") or "")),
+        reverse=True,
+    )[:10]
+
+    lines: list[str] = [
+        "# Today Crawl Report",
+        "",
+        "## Target",
+        f"- Calendar date: **{stats['target_date']}**",
+        f"- Timezone: **{stats['timezone']}**",
+        f"- UTC window: `{stats['window_start_utc']}` → `{stats['window_end_utc']}`",
+        "",
+        "## Totals",
+        f"- Profile sources (global DB): {db.get_crawl_summary_stats()['total_sources']}",
+        f"- **Today articles (exported filter):** {stats['today_article_count']}",
+        f"- Errors logged (UTC window): {stats['total_errors_window']}",
+        f"- Frontier skipped **NotToday** (seen in window): {stats['not_today_skipped_frontier']}",
+        f"- **NotToday** crawl_errors (window): {stats['not_today_errors']}",
+        f"- **AccessControlDetected** (window): {stats['access_control_window']}",
+        "",
+        "## Errors By Type (window)",
+        _fmt_dict_counts(stats.get("errors_by_type_window") or {}).rstrip(),
+        "",
+        "## Articles By Strategy (today export)",
+        _fmt_dict_counts(stats.get("articles_by_strategy") or {}).rstrip(),
+        "",
+        "## Top Sources By Today Articles",
+        _fmt_top_sources(stats.get("top_sources_today") or []).rstrip(),
+        "",
+        "## Top Articles (up to 10)",
+        "| source_id | title | published_at | url | quality_score |",
+        "|---|---|---|---|---|",
+    ]
+    for r in articles:
+        title = str(r.get("title") or "").replace("|", "\\|").replace("\n", " ")[:120]
+        lines.append(
+            f"| {r.get('source_id') or ''} | {title} | {r.get('published_at') or ''} | {r.get('url') or ''} | {r.get('quality_score') or ''} |"
+        )
+    if not articles:
+        lines.append("| — | — | — | — | — |")
+
+    lines.extend(
+        [
+            "",
+            "## Limitations",
+            "- Public discovery only (RSS / sitemap `lastmod` / homepage links); no paywall, login, or CAPTCHA bypass.",
+            "- Some sites do not expose every same-day article in feeds or sitemap.",
+            "- HTML discovery is bounded by depth and URL caps; not exhaustive site crawl.",
+            "",
+        ]
+    )
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+
+
 def _fmt_dict_counts(values: dict[str, int]) -> str:
     if not values:
         return "- None\n"

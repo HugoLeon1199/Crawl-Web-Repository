@@ -14,6 +14,13 @@ from scrapy_engine.items import ArticleItem
 from settings import CrawlRules, load_crawl_rules
 from storage.db import WebIntelDB, new_id, utc_now
 from storage.raw_store import RawStore
+from utils.today_filter import (
+    is_datetime_in_range,
+    is_url_likely_today,
+    parse_any_datetime,
+    resolve_calendar_date,
+    target_date_range,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -228,6 +235,59 @@ class WebIntelArticlePipeline:
             )
             adapter.pop("html_body", None)
             return item
+
+        today_only = bool(spider.settings.getbool("WEB_INTEL_TODAY_ONLY", False))
+        if today_only:
+            target_date_str = spider.settings.get("WEB_INTEL_TARGET_DATE") or "today"
+            timezone_name = spider.settings.get("WEB_INTEL_TIMEZONE") or "Europe/Amsterdam"
+            start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+            target_d = resolve_calendar_date(target_date_str, timezone_name)
+
+            cand_raw = adapter.get("candidate_published_at")
+            resolved_pub = parse_any_datetime(str(cand_raw)) if cand_raw else None
+            if resolved_pub is None and extracted.published_at:
+                resolved_pub = parse_any_datetime(str(extracted.published_at))
+
+            likely = is_url_likely_today(url, target_d)
+
+            if resolved_pub is not None and is_datetime_in_range(resolved_pub, start_utc, end_utc):
+                pass
+            elif resolved_pub is not None and not is_datetime_in_range(resolved_pub, start_utc, end_utc):
+                self._log_error(
+                    source_id=source_id,
+                    url=url,
+                    error_type="NotToday",
+                    error_message="published_at outside target calendar window",
+                    frontier_status="skipped",
+                )
+                adapter.pop("html_body", None)
+                return item
+            elif likely:
+                try:
+                    self.db.insert_crawl_error(
+                        {
+                            "id": new_id(),
+                            "source_id": source_id,
+                            "url": url,
+                            "stage": "scrapy_pipeline",
+                            "error_type": "PublishedDateMissingLikelyToday",
+                            "error_message": "published_at unknown or unparsed; URL matched today path heuristic",
+                            "created_at": utc_now(),
+                        }
+                    )
+                    self._bump_errors()
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("warning insert failed: %s", exc)
+            else:
+                self._log_error(
+                    source_id=source_id,
+                    url=url,
+                    error_type="NotToday",
+                    error_message="no trustworthy today signal (date/path)",
+                    frontier_status="skipped",
+                )
+                adapter.pop("html_body", None)
+                return item
 
         score = compute_quality_score(
             title=extracted.title,
