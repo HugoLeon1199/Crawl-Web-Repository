@@ -122,6 +122,7 @@ def test_run_pipeline_command_building() -> None:
         strategy="all",
         force_refresh=True,
         run_id="run-1",
+        close_spider_timeout=600,
     )
 
     assert commands[0] == [
@@ -135,5 +136,8 @@ def test_run_pipeline_command_building() -> None:
         "--force-refresh",
     ]
     assert commands[1][-2:] == ["--run-id", "run-1"]
+    assert "--close-spider-timeout" in commands[1]
+    idx = commands[1].index("--close-spider-timeout")
+    assert commands[1][idx + 1] == "600"
     assert commands[1][0:2] == ["python", "run_scrapy.py"]
     assert commands[2] == ["python", "run_export.py"]

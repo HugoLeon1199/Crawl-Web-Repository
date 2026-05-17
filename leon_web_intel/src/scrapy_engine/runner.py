@@ -45,6 +45,7 @@ def run_scrapy_engine(
     max_articles_per_source: int,
     db_path: Path | None = None,
     run_id: str | None = None,
+    close_spider_timeout: int = 600,
 ) -> ScrapyRunSummary:
     """Execute Scrapy lane(s). Uses CrawlerProcess for reliable teardown (esp. Windows)."""
     _ = run_id  # Stored at the orchestration layer for this phase.
@@ -68,6 +69,7 @@ def run_scrapy_engine(
         crawl_rules_path=rules_path,
         raw_root=raw_root,
         summary=summary,
+        closespider_timeout=close_spider_timeout,
     )
 
     configure_logging(settings={"LOG_LEVEL": settings.get("LOG_LEVEL")})

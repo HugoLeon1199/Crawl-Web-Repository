@@ -146,6 +146,20 @@ def test_scrapy_settings_robots_obey_true(tmp_path: Path) -> None:
     assert d["USER_AGENT"] == rules.user_agent
     assert d["DOWNLOAD_TIMEOUT"] == int(rules.request_timeout_seconds)
     assert d["CONCURRENT_REQUESTS_PER_DOMAIN"] == 2
+    assert d["CLOSESPIDER_TIMEOUT"] == 600
+
+
+def test_scrapy_settings_closespider_timeout_override(tmp_path: Path) -> None:
+    rules = CrawlRules()
+    d = build_scrapy_settings_dict(
+        rules,
+        db_path=tmp_path / "db.duckdb",
+        crawl_rules_path=tmp_path / "c.yaml",
+        raw_root=tmp_path / "raw",
+        summary=ScrapyRunSummary(),
+        closespider_timeout=42,
+    )
+    assert d["CLOSESPIDER_TIMEOUT"] == 42
 
 
 @pytest.fixture

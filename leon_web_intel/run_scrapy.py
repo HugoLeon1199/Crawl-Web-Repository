@@ -37,6 +37,13 @@ def main() -> None:
         help="Path to DuckDB written by run_profile.py",
     )
     p.add_argument("--run-id", default=None, help="Optional crawl_runs.run_id from run_pipeline.py")
+    p.add_argument(
+        "--close-spider-timeout",
+        type=int,
+        default=600,
+        metavar="SEC",
+        help="Scrapy CLOSESPIDER_TIMEOUT (wall-clock seconds for entire crawl)",
+    )
     args = p.parse_args()
 
     summary = run_scrapy_engine(
@@ -46,6 +53,7 @@ def main() -> None:
         max_articles_per_source=args.max_articles_per_source,
         db_path=args.db,
         run_id=args.run_id,
+        close_spider_timeout=args.close_spider_timeout,
     )
 
     print("")

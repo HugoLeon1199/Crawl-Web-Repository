@@ -16,6 +16,7 @@ def build_scrapy_settings_dict(
     crawl_rules_path: Path,
     raw_root: Path,
     summary: object,
+    closespider_timeout: int = 600,
 ) -> dict:
     """Project-style overrides; merged into Scrapy ``Settings``."""
     return {
@@ -33,7 +34,7 @@ def build_scrapy_settings_dict(
         "COOKIES_ENABLED": False,
         "TELNETCONSOLE_ENABLED": False,
         # Wall-clock cap so the CLI cannot hang forever on stuck downloads (CloseSpider is in EXTENSIONS_BASE).
-        "CLOSESPIDER_TIMEOUT": 600,
+        "CLOSESPIDER_TIMEOUT": int(closespider_timeout),
         "ITEM_PIPELINES": {
             "scrapy_engine.pipelines.WebIntelArticlePipeline": 300,
         },
@@ -52,7 +53,18 @@ def build_scrapy_settings(
     crawl_rules_path: Path,
     raw_root: Path,
     summary: object,
+    closespider_timeout: int = 600,
 ) -> Settings:
     s = Settings()
-    s.setdict(build_scrapy_settings_dict(rules, db_path=db_path, crawl_rules_path=crawl_rules_path, raw_root=raw_root, summary=summary), priority="cmdline")
+    s.setdict(
+        build_scrapy_settings_dict(
+            rules,
+            db_path=db_path,
+            crawl_rules_path=crawl_rules_path,
+            raw_root=raw_root,
+            summary=summary,
+            closespider_timeout=closespider_timeout,
+        ),
+        priority="cmdline",
+    )
     return s

@@ -27,6 +27,7 @@ def build_pipeline_commands(
     strategy: str,
     force_refresh: bool,
     run_id: str,
+    close_spider_timeout: int,
 ) -> list[list[str]]:
     profile_cmd = [
         python_executable,
@@ -49,6 +50,8 @@ def build_pipeline_commands(
         str(limit if limit is not None else 0),
         "--max-articles-per-source",
         str(max_articles_per_source),
+        "--close-spider-timeout",
+        str(close_spider_timeout),
         "--run-id",
         run_id,
     ]
@@ -60,17 +63,27 @@ def build_pipeline_commands(
     ]
 
 
-def _run_step(cmd: list[str]) -> int:
+def _run_step(cmd: list[str], *, timeout_seconds: int | None) -> tuple[int, bool]:
+    """Run one subprocess step. Returns ``(returncode, timed_out)``."""
     print("")
     print("===== RUNNING =====")
     print(" ".join(cmd))
-    completed = subprocess.run(cmd, cwd=ROOT)  # noqa: S603
+    timeout: float | None = float(timeout_seconds) if timeout_seconds is not None else None
+    try:
+        completed = subprocess.run(cmd, cwd=ROOT, timeout=timeout)  # noqa: S603
+    except subprocess.TimeoutExpired:
+        print("")
+        print("===== STEP TIMEOUT =====")
+        print("Command:", " ".join(cmd))
+        if timeout_seconds is not None:
+            print(f"Exceeded {timeout_seconds}s; subprocess terminated.")
+        return 124, True
     if completed.returncode != 0:
         print("")
         print("===== STEP FAILED =====")
         print("Command:", " ".join(cmd))
         print("Return code:", completed.returncode)
-    return int(completed.returncode)
+    return int(completed.returncode), False
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -80,7 +93,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-articles-per-source", type=int, default=3)
     parser.add_argument("--strategy", choices=("rss", "sitemap", "html", "all"), default="all")
     parser.add_argument("--force-refresh", action="store_true")
+    parser.add_argument(
+        "--step-timeout-seconds",
+        type=int,
+        default=None,
+        metavar="SEC",
+        help=(
+            "Wall-clock cap per pipeline subprocess step (profile, scrapy, export). "
+            "On timeout the step is killed, crawl_run marked failed, and run_export.py "
+            "is still executed once without this cap for a partial export."
+        ),
+    )
+    parser.add_argument(
+        "--close-spider-timeout",
+        type=int,
+        default=600,
+        metavar="SEC",
+        help="Forwarded to run_scrapy.py as Scrapy CLOSESPIDER_TIMEOUT (seconds).",
+    )
     args = parser.parse_args(argv)
+    if args.step_timeout_seconds is not None and args.step_timeout_seconds <= 0:
+        parser.error("--step-timeout-seconds must be positive when set")
+    if args.close_spider_timeout <= 0:
+        parser.error("--close-spider-timeout must be positive")
 
     run_id = new_id()
     db_path = ROOT / "data" / "db" / "web_intel.duckdb"
@@ -100,6 +135,8 @@ def main(argv: list[str] | None = None) -> int:
                     "max_articles_per_source": args.max_articles_per_source,
                     "strategy": args.strategy,
                     "force_refresh": bool(args.force_refresh),
+                    "step_timeout_seconds": args.step_timeout_seconds,
+                    "close_spider_timeout": args.close_spider_timeout,
                 },
                 sort_keys=True,
             ),
@@ -116,10 +153,28 @@ def main(argv: list[str] | None = None) -> int:
         strategy=args.strategy,
         force_refresh=bool(args.force_refresh),
         run_id=run_id,
+        close_spider_timeout=args.close_spider_timeout,
     )
 
     for cmd in commands:
-        rc = _run_step(cmd)
+        rc, timed_out = _run_step(cmd, timeout_seconds=args.step_timeout_seconds)
+        if timed_out:
+            fail_db = WebIntelDB(db_path)
+            try:
+                fail_db.finish_crawl_run(
+                    run_id=run_id,
+                    status="failed",
+                    notes=(
+                        f"step timeout after {args.step_timeout_seconds}s: {' '.join(cmd)}"
+                    ),
+                )
+            finally:
+                fail_db.close()
+            export_cmd = [sys.executable, "run_export.py"]
+            ex_rc, ex_timed_out = _run_step(export_cmd, timeout_seconds=None)
+            if ex_timed_out:
+                return 124
+            return 124 if ex_rc == 0 else ex_rc
         if rc != 0:
             fail_db = WebIntelDB(db_path)
             try:

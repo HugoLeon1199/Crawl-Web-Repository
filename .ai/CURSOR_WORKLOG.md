@@ -3,6 +3,48 @@
 **Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
 **Project:** Leon Global Web Intelligence Engine  
 
+## Current session (2026-05-17) — `run_pipeline` step timeout + Scrapy `CLOSESPIDER_TIMEOUT` CLI
+
+### Goal
+
+Giữ pipeline **kết thúc sạch** trước full crawl: giới hạn thời gian từng bước subprocess, khi timeout vẫn **xuất partial** qua `run_export.py`; cho phép chỉnh **CLOSESPIDER_TIMEOUT** từ CLI.
+
+### Files modified
+
+- `leon_web_intel/run_pipeline.py` — `--step-timeout-seconds` (optional); `_run_step(..., timeout_seconds)`; on **TimeoutExpired**: `finish_crawl_run(..., failed)`, sau đó chạy **`run_export.py`** không áp timeout; `--close-spider-timeout` forward vào `run_scrapy.py`; `config_json` ghi thêm `step_timeout_seconds`, `close_spider_timeout`.
+- `leon_web_intel/run_scrapy.py` — `--close-spider-timeout` (default 600).
+- `leon_web_intel/src/scrapy_engine/runner.py` — `run_scrapy_engine(..., close_spider_timeout=600)`.
+- `leon_web_intel/src/scrapy_engine/settings.py` — `build_scrapy_settings_dict` / `build_scrapy_settings` nhận `closespider_timeout`.
+- `leon_web_intel/tests/test_crawl_foundation.py` — `build_pipeline_commands(..., close_spider_timeout=600)` + assert flag.
+- `leon_web_intel/tests/test_scrapy_layer.py` — `test_scrapy_settings_closespider_timeout_override`.
+- `.ai/CURSOR_WORKLOG.md` — mục này.
+
+### Commands run
+
+Interpreter: `D:\cursor\LEONCODE\CRAWL WEB\.tools\nuget_packages\python.3.11.9\tools\python.exe` (cwd `leon_web_intel`).
+
+| Command | Result |
+|---------|--------|
+| `python -m pytest -v --tb=short` | **29 passed** (~4s) |
+| `python run_pipeline.py --input config/sources_raw.txt --limit 10 --max-articles-per-source 1 --strategy rss --force-refresh --step-timeout-seconds 180` | **Exit 0** — profile + Scrapy RSS + export hoàn tất trong giới hạn từng bước |
+
+### Latest `final_crawl_report.md` (sau pipeline trên)
+
+File: `leon_web_intel/data/exports/final_crawl_report.md`
+
+- **Run ID:** `6f6bfbea-c05d-49c7-b8d4-1e3df22cddcb` — status **success**
+- **Articles:** 3  
+- **Errors:** 17 (toàn bộ **AccessControlDetected** trong báo cáo)  
+- **Frontier:** crawled **3**, skipped **14**, pending/crawling/failed **0**  
+- **Discovered URLs (totals):** 0  
+
+### Notes
+
+- Subprocess timeout dùng `subprocess.run(..., timeout=...)` (Python kill child sau timeout). Export khôi phục chạy **`run_export.py`** không timeout để tối đa hóa khả năng ghi partial.
+- Không thêm AI summary, dashboard, scheduler, proxy, stealth, bypass.
+
+---
+
 ## Current session (2026-05-17) - E2E Crawl Foundation: runs, frontier, health, exports, report
 
 ### Current task
