@@ -9,3 +9,6 @@ leon_web_intel/logs/
 **/__pycache__/
 .pytest_cache/
 *.py[cod]
+
+# CI-generated reports (optional local runs)
+leon_web_intel/ci-results/

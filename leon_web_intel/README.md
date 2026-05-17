@@ -134,6 +134,8 @@ RSS beats sitemap; known API beats all. Domains listed under `prefer_metadata_on
 python -m pytest
 ```
 
+On GitHub Actions, each run uploads **Artifacts** named `leon-web-intel-ci-results`: open the workflow run → **Artifacts** at the bottom → download the zip. Inside you get `pytest-junit.xml` (machine-readable test report) and `dry_run.txt` (stdout from `run_profile.py --dry-run`).
+
 ## Next steps (beyond v1)
 
 - Expand Scrapy integration (per-URL robots, richer scheduling, metrics) without coupling spiders to profiler internals  

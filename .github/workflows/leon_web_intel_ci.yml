@@ -32,8 +32,19 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r requirements.txt
 
-      - name: Pytest
-        run: python -m pytest -v --tb=short
+      - name: Prepare CI result files folder
+        run: mkdir -p ci-results
 
       - name: Profile dry-run (no HTTP)
-        run: python run_profile.py --input config/sources_raw.txt --dry-run
+        run: python run_profile.py --input config/sources_raw.txt --dry-run 2>&1 | tee ci-results/dry_run.txt
+
+      - name: Pytest
+        run: python -m pytest -v --tb=short --junitxml=ci-results/pytest-junit.xml
+
+      - name: Upload result files (JUnit + dry-run log)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: leon-web-intel-ci-results
+          path: leon_web_intel/ci-results/
+          if-no-files-found: warn
