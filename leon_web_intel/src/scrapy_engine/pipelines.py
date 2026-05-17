@@ -188,11 +188,20 @@ class WebIntelArticlePipeline:
         else:
             html_text = str(html)
 
+        min_len = int(spider.settings.get("WEB_INTEL_MIN_ARTICLE_LENGTH", self.rules.min_article_content_length))
+
+        extracted = extract_with_trafilatura(html_text)
+        content_hash = extracted.content_hash
+        content_length = extracted.content_length
+
         paywall, login, captcha = access_control_triplet(
             html_text,
             self.rules.paywall_keywords,
             self.rules.login_keywords,
             self.rules.captcha_keywords,
+            extracted_plain=extracted.content or "",
+            content_length=content_length,
+            min_article_content_length=min_len,
         )
         if paywall or login or captcha:
             self._log_error(
@@ -210,12 +219,6 @@ class WebIntelArticlePipeline:
             raw_path = self.raw_store.save_html(source_id, html_text.encode("utf-8"))
         except Exception as exc:  # noqa: BLE001
             logger.debug("raw_store.save_html failed {}: {}", url, exc)
-
-        extracted = extract_with_trafilatura(html_text)
-        content_hash = extracted.content_hash
-        content_length = extracted.content_length
-
-        min_len = int(spider.settings.get("WEB_INTEL_MIN_ARTICLE_LENGTH", self.rules.min_article_content_length))
         if content_length < min_len:
             self._log_error(
                 source_id=source_id,

@@ -3,6 +3,54 @@
 **Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
 **Project:** Leon Global Web Intelligence Engine  
 
+## Current session (2026-05-17) — Giảm false positive AccessControlDetected (governance)
+
+### Mục tiêu
+
+Giữ **không bypass** paywall/login/CAPTCHA/proxy/stealth; làm governance **ít nhạy** với chữ *Subscribe / Sign in* ở chrome trang khi **main text trafilatura đã đủ dài**.
+
+### Files modified / created
+
+- `leon_web_intel/src/scrapy_engine/extract_helpers.py` — **extract-first semantics**: hard wall (captcha/bot marker, access denied), strong phrases (`login to continue`, `subscribe to continue`, …), rồi nếu `content_length >= min_article_content_length` thì **không** block soft keyword; nếu ngắn thì block khi soft keyword trong **body extract** hoặc **≥5** hit trên visible text (script/style stripped).
+- `leon_web_intel/src/scrapy_engine/pipelines.py` — gọi `extract_with_trafilatura` **trước** `access_control_triplet(...)` (truyền `extracted_plain` + lengths).
+- `leon_web_intel/tests/test_access_control_refined.py` — 4 test offline (public long + Subscribe nav; paywall phrase; captcha; login continue).
+
+### Commands run
+
+Interpreter: `D:\cursor\LEONCODE\CRAWL WEB\.tools\nuget_packages\python.3.11.9\tools\python.exe` (cwd `leon_web_intel`).
+
+| Command | Result |
+|---------|--------|
+| `python -m pytest -v --tb=short` | **40 passed** (~3.4s) |
+| `python run_today.py --input config/sources_raw.txt --strategy rss --date 2026-05-17 --timezone Europe/Amsterdam --profile-limit 12 --max-urls-per-source 100 --step-timeout-seconds 900 --close-spider-timeout 600 --force-refresh` | **Exit 0** |
+
+### Smoke (`today_final_report.md`)
+
+- **Run ID:** `72f7fe6c-1276-4203-b5a5-c73e97ac2de3` — **success**  
+- **Today articles (export filter):** **19**  
+- **Errors (UTC window):** **122** — **AccessControlDetected: 115**, **ShortContent: 7**  
+- **NotToday** (`crawl_errors` trong cửa sổ): **0** · Frontier NotToday trong cửa sổ: **0**  
+
+### Top articles (mẫu từ báo cáo)
+
+1. Al Jazeera — World Cup 2026 / FIFA talks — `https://www.aljazeera.com/sports/2026/5/17/fifa-holds-positive-talks-with-iranian-football-officials-on-world-cup?traffic_source=rss`  
+2. France24 — WHO Ebola emergency — `https://www.france24.com/en/health/20260517-who-declares-global-health-emergency-over-ebola-outbreak-in-congo-and-uganda`  
+3. Al Jazeera — WHO Ebola DR Congo/Uganda — `https://www.aljazeera.com/news/2026/5/17/who-declares-ebola-outbreak-in-dr-congo-uganda-a-global-health-emergency?traffic_source=rss`  
+*(đủ 10 dòng trong `today_final_report.md`)*  
+
+### Outputs
+
+- `leon_web_intel/data/exports/today_articles.csv` / `.parquet`  
+- `leon_web_intel/data/exports/today_final_report.md`  
+- `leon_web_intel/data/exports/today_crawl_errors.csv` (và các `today_*` khác sau `run_export --today-only`)
+
+### So sánh nhanh
+
+- Smoke RSS today **trước** chỉnh governance: **0** today articles, ~79 AccessControl trên batch nhỏ.  
+- **Sau** chỉnh: **19** today articles cùng profile-limit 12 / RSS; vẫn còn AccessControl trên nhiều domain khác (đúng chỗ có gate thật hoặc HTML không đủ text).
+
+---
+
 ## Current session (2026-05-17) — TODAY FULL ARTICLE CRAWL MODE (public discovery)
 
 ### Goal
