@@ -43,6 +43,7 @@ def main() -> int:
 
     paths = {
         "articles_csv": out_dir / "articles.csv",
+        "articles_metadata_csv": out_dir / "articles_metadata.csv",
         "articles_parquet": out_dir / "articles.parquet",
         "crawl_errors_csv": out_dir / "crawl_errors.csv",
         "discovered_urls_csv": out_dir / "discovered_urls.csv",
@@ -53,6 +54,7 @@ def main() -> int:
 
     today_paths = {
         "articles_csv": out_dir / "today_articles.csv",
+        "articles_metadata_csv": out_dir / "today_articles_metadata.csv",
         "articles_parquet": out_dir / "today_articles.parquet",
         "crawl_errors_csv": out_dir / "today_crawl_errors.csv",
         "crawl_frontier_csv": out_dir / "today_crawl_frontier.csv",
@@ -65,6 +67,9 @@ def main() -> int:
         db.update_source_health_from_current_db()
         if args.today_only:
             db.export_today_articles_csv(today_paths["articles_csv"], target_date_str=args.date, timezone_name=args.timezone)
+            db.export_today_articles_metadata_csv(
+                today_paths["articles_metadata_csv"], target_date_str=args.date, timezone_name=args.timezone
+            )
             db.export_today_articles_parquet(
                 today_paths["articles_parquet"], target_date_str=args.date, timezone_name=args.timezone
             )
@@ -76,6 +81,7 @@ def main() -> int:
             write_today_crawl_report(db, today_paths["final_report"], target_date=args.date, timezone_name=args.timezone)
 
         db.export_articles_csv(paths["articles_csv"])
+        db.export_articles_metadata_csv(paths["articles_metadata_csv"])
         db.export_articles_parquet(paths["articles_parquet"])
         db.export_crawl_errors_csv(paths["crawl_errors_csv"])
         db.export_discovered_urls_csv(paths["discovered_urls_csv"])

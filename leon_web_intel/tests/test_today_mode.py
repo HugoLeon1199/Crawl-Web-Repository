@@ -60,6 +60,9 @@ def test_today_export_empty_db_no_crash(tmp_path: Path) -> None:
     db = WebIntelDB(db_path)
     try:
         db.export_today_articles_csv(tmp_path / "a.csv", target_date_str="2026-05-17", timezone_name="Europe/Amsterdam")
+        db.export_today_articles_metadata_csv(
+            tmp_path / "meta.csv", target_date_str="2026-05-17", timezone_name="Europe/Amsterdam"
+        )
         db.export_today_articles_parquet(tmp_path / "a.parquet", target_date_str="2026-05-17", timezone_name="Europe/Amsterdam")
         db.export_today_errors_csv(tmp_path / "e.csv", target_date_str="2026-05-17", timezone_name="Europe/Amsterdam")
         db.export_today_frontier_csv(tmp_path / "f.csv", target_date_str="2026-05-17", timezone_name="Europe/Amsterdam")
@@ -67,6 +70,7 @@ def test_today_export_empty_db_no_crash(tmp_path: Path) -> None:
     finally:
         db.close()
     assert (tmp_path / "a.csv").is_file()
+    assert (tmp_path / "meta.csv").is_file()
 
 
 def test_today_report_empty_db(tmp_path: Path) -> None:

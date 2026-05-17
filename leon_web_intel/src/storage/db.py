@@ -487,6 +487,17 @@ class WebIntelDB:
         with self._lock:
             self._export_query_csv("SELECT * FROM articles ORDER BY extracted_at, id", out_path)
 
+    def export_articles_metadata_csv(self, out_path: Path) -> None:
+        with self._lock:
+            self._export_query_csv(
+                """
+                SELECT id, source_id, url, title, published_at, content_length, content_hash,
+                       language, crawl_strategy_used, raw_path, extracted_at, quality_score
+                FROM articles ORDER BY extracted_at, id
+                """,
+                out_path,
+            )
+
     def export_articles_parquet(self, out_path: Path) -> None:
         with self._lock:
             out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -728,6 +739,16 @@ class WebIntelDB:
         rows = self.fetch_today_articles(target_date_str=target_date_str, timezone_name=timezone_name)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         pd.DataFrame(rows).to_csv(out_path, index=False)
+
+    def export_today_articles_metadata_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
+        import pandas as pd
+
+        rows = self.fetch_today_articles(target_date_str=target_date_str, timezone_name=timezone_name)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        df = pd.DataFrame(rows)
+        if not df.empty and "content" in df.columns:
+            df = df.drop(columns=["content"])
+        df.to_csv(out_path, index=False)
 
     def export_today_articles_parquet(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
         import pandas as pd
