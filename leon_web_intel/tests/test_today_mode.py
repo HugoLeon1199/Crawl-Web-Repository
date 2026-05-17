@@ -71,6 +71,8 @@ def test_today_export_empty_db_no_crash(tmp_path: Path) -> None:
         db.close()
     assert (tmp_path / "a.csv").is_file()
     assert (tmp_path / "meta.csv").is_file()
+    meta_header = (tmp_path / "meta.csv").read_text(encoding="utf-8").strip().split("\n")[0]
+    assert meta_header == "source_id,title,published_at,url,content_length,quality_score,crawl_strategy_used"
 
 
 def test_today_report_empty_db(tmp_path: Path) -> None:

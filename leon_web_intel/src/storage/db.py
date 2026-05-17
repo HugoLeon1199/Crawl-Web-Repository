@@ -743,11 +743,22 @@ class WebIntelDB:
     def export_today_articles_metadata_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
         import pandas as pd
 
+        cols = [
+            "source_id",
+            "title",
+            "published_at",
+            "url",
+            "content_length",
+            "quality_score",
+            "crawl_strategy_used",
+        ]
         rows = self.fetch_today_articles(target_date_str=target_date_str, timezone_name=timezone_name)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         df = pd.DataFrame(rows)
-        if not df.empty and "content" in df.columns:
-            df = df.drop(columns=["content"])
+        if df.empty:
+            pd.DataFrame(columns=cols).to_csv(out_path, index=False)
+            return
+        df = df.reindex(columns=cols)
         df.to_csv(out_path, index=False)
 
     def export_today_articles_parquet(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
