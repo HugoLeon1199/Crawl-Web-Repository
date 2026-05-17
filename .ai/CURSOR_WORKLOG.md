@@ -3,6 +3,42 @@
 **Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
 **Project:** Leon Global Web Intelligence Engine  
 
+## Current session (2026-05-17) — RSS scale batch limit 30 (pytest + pipeline)
+
+Chỉ kiểm tra scale nhỏ–vừa: **RSS**, `--limit 30`, không đổi code (không có lỗi implementation).
+
+### Commands run
+
+Interpreter: `D:\cursor\LEONCODE\CRAWL WEB\.tools\nuget_packages\python.3.11.9\tools\python.exe` (cwd `leon_web_intel`).
+
+| Command | Result |
+|---------|--------|
+| `python -m pytest -v --tb=short` | **29 passed** (~3.6s) |
+| `python run_pipeline.py --input config/sources_raw.txt --limit 30 --max-articles-per-source 1 --strategy rss --force-refresh --step-timeout-seconds 300 --close-spider-timeout 240` | **Exit 124** — bước **`run_profile.py --profile-only --limit 30`** bị **`step-timeout-seconds 300`** khi profiler ~**16/30** nguồn; **`run_scrapy.py` không được chạy**; pipeline gọi **`run_export.py`** recovery (partial export) |
+
+### Run audit (`final_crawl_report.md`)
+
+- **Run ID:** `abf1e8ea-5713-4435-a774-a069f6294024`
+- **Status:** **failed** (ghi nhận timeout profile subprocess)
+- **Totals (DB sau export):** **Articles:** 3 · **Errors:** 17  
+- **Frontier:** crawled **3** · skipped **14** · failed **0** (pending/crawling **0**)  
+- **Top error types:** chỉ **AccessControlDetected** (17 trong báo cáo tổng hợp)
+
+### Export files checked
+
+- `leon_web_intel/data/exports/final_crawl_report.md` — đã đọc; run failed + số liệu trên khớp  
+- `leon_web_intel/data/exports/articles.csv` — **3** bản ghi article (CSV nhiều dòng do field có newline)  
+- `leon_web_intel/data/exports/crawl_errors.csv` — **17** dòng lỗi + header  
+- `leon_web_intel/data/exports/crawl_frontier.csv` — **17** hàng dữ liệu + header (3 crawled, còn lại skipped/…)  
+- `leon_web_intel/data/exports/source_health.csv` — **16** source_id (khớp profiler đã ghi **16** profile trước khi bị cắt)
+
+### Timeout / hang
+
+- **Không hang vô hạn:** subprocess profile bị **SIGTERM/kill theo `subprocess.run` timeout** sau ~**300s** wall-clock; **`run_export`** recovery chạy xong.  
+- **Rút kinh nghiệm scale:** với **`--force-refresh --limit 30`**, **300s** có thể **không đủ** cho xong `profile-only` (vài domain chậm/HTML probe dài); muốn full 30 profile + RSS crawl trong một lần chạy thì cần **`--step-timeout-seconds`** cao hơn hoặc tách profile/crawl — **không đổi code trong phiên này.**
+
+---
+
 ## Current session (2026-05-17) — `run_pipeline` step timeout + Scrapy `CLOSESPIDER_TIMEOUT` CLI
 
 ### Goal
