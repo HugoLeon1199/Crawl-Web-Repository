@@ -3,6 +3,101 @@
 **Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
 **Project:** Leon Global Web Intelligence Engine  
 
+## Current session (2026-05-16) — Full TODAY crawl (`strategy all`): agent environment + safe metadata
+
+### Mục tiêu kiểm tra
+
+- Crawl toàn bộ bài public **hôm nay** mà hệ thống phát hiện được từ **tất cả** source trong `config/sources_raw.txt`, qua **RSS / sitemap / HTML**, không bypass paywall/login/captcha.
+- **Không** commit nội dung full article lên GitHub; chỉ commit **`today_final_report.md`** + **`today_articles_metadata.csv`** (không cột `content`).
+
+### Pytest (bước 1)
+
+| Command | Result |
+|---------|--------|
+| `cd leon_web_intel` → `python -m pytest -v --tb=short` | **Không chạy được trên agent Cursor:** Windows `py -0p` trỏ `D:\python.exe` nhưng **`Test-Path D:\python.exe` → False** (interpreter hỏng/thiếu). Cần máy local có `python` hoặc sửa Python Install Manager / cài Python rồi chạy lại bước 1. |
+
+### Full today crawl (bước 2)
+
+| Command | Result |
+|---------|--------|
+| `python run_today.py --input config/sources_raw.txt --strategy all --date today --timezone Europe/Amsterdam --profile-limit 198 --max-urls-per-source 1000 --step-timeout-seconds 7200 --close-spider-timeout 3600 --force-refresh` | **Không chạy được trên agent** (thiếu `python`). |
+
+**Lệnh copy-paste sau khi có Python (cwd `leon_web_intel`):**
+
+```bash
+python -m pytest -v --tb=short
+python run_today.py --input config/sources_raw.txt --strategy all --date today --timezone Europe/Amsterdam --profile-limit 198 --max-urls-per-source 1000 --step-timeout-seconds 7200 --close-spider-timeout 3600 --force-refresh
+```
+
+### Run ID / status
+
+- **Full `strategy all` run:** **chưa thực hiện** trên agent → **run_id:** *n/a* · **status:** *pending local execution*
+
+### Target date / timezone (theo pipeline hiện tại)
+
+- **`date today`** + **`Europe/Amsterdam`** → báo cáo đã có trong repo gần nhất (RSS smoke trước đó) khớp **2026-05-17** và cửa sổ UTC `2026-05-16 22:00` → `2026-05-17 22:00` (xem `today_final_report.md`).
+
+### Baseline trong repo (RSS smoke — **không** phải full `strategy all`)
+
+These numbers come from the latest checked-in **`today_final_report.md`** (profile-limit nhỏ / RSS path), **not** from a completed `--strategy all --profile-limit 198` run:
+
+- **Today articles (exported filter):** **19**
+- **Articles by strategy:** `rss_then_article_extract`: **19**
+- **Top sources by article count:** `aljazeera_com`: **13**, `france24_com`: **6**
+- **Total errors (UTC window):** **122**
+- **AccessControlDetected:** **115**
+- **ShortContent:** **7**
+- **NotToday** (`crawl_errors` window): **0** · Frontier skipped **NotToday**: **0**
+
+### Top 20 titles / URLs (19 rows — toàn bộ today slice baseline)
+
+1. World Cup 2026: FIFA holds ‘positive’ talks with Iranian football officials — https://www.aljazeera.com/sports/2026/5/17/fifa-holds-positive-talks-with-iranian-football-officials-on-world-cup?traffic_source=rss  
+2. WHO declares global health emergency over Ebola outbreak in Congo and Uganda — https://www.france24.com/en/health/20260517-who-declares-global-health-emergency-over-ebola-outbreak-in-congo-and-uganda  
+3. WHO declares Ebola outbreak in DR Congo, Uganda a global health emergency — https://www.aljazeera.com/news/2026/5/17/who-declares-ebola-outbreak-in-dr-congo-uganda-a-global-health-emergency?traffic_source=rss  
+4. Ukraine launches more than 500 drones at Russia in deadly overnight attack, authorities say — https://www.france24.com/en/europe/20260517-ukraine-launches-more-than-500-drones-at-russia-in-deadly-overnight-attack-authorities-say  
+5. Sports - Manchester City see off Chelsea in FA Cup final and keep treble dream alive — https://www.france24.com/en/tv-shows/sports/20260517-manchester-city-see-off-chelsea-in-fa-cup-final-and-keep-treble-dream-alive  
+6. Ronda Rousey retires again after 17-second submission defeat of Gina Carano — https://www.aljazeera.com/sports/2026/5/17/ronda-rousey-vs-gina-carano-fight-rousey-wins-with-a-17-second-submission?traffic_source=rss  
+7. Modest fashion’s global turn — https://www.aljazeera.com/features/2026/5/17/modest-fashions-global?traffic_source=rss  
+8. Middle East live: USS Ford returns from Iran war after longest deployment since Vietnam — https://www.france24.com/en/middle-east/20260517-middle-east-live-uss-ford-returns-from-iran-war-after-longest-deployment-since-vietnam  
+9. Iran war day 79: Israel’s relentless bombardment of Lebanon continues — https://www.aljazeera.com/news/2026/5/17/iran-war-day-79-tehran-to-unveil-hormuz-toll-plan-israel-bombs-lebanon?traffic_source=rss  
+10. Iran plans Hormuz tolls; Trump warns of ‘very bad time’ over stalled talks — https://www.aljazeera.com/news/liveblog/2026/5/17/iran-war-live-tehran-eyes-tolls-in-hormuz-trump-warns-of-very-bad-time?traffic_source=rss  
+11. Bulgaria wins 2026 Eurovision, Israel lands a nail-biting second — https://www.france24.com/en/culture/20260517-bulgaria-s-bangaranga-wins-eurovision-with-israel-second  
+12. Iraq’s new PM Ali al-Zaidi formally takes over — https://www.aljazeera.com/video/newsfeed/2026/5/17/aje-onl-nf_clip-iraqs-new-pm-al-zaidi-formally-takes-over-160526?traffic_source=rss  
+13. Tunisians rally amid economic crisis and political arrests — https://www.aljazeera.com/video/newsfeed/2026/5/17/tunisians-rally-amid-economic-crisis-and-political-arrests?traffic_source=rss  
+14. Activists troll far-right UK rally with giant pro-immigration clip — https://www.aljazeera.com/video/newsfeed/2026/5/17/aje-onl-nf_clip-led-by-donkeys-hijack-far-right-rally-160526?traffic_source=rss  
+15. Algeria’s USM Alger beat Egypt’s Zamalek to win CAF Cup — https://www.aljazeera.com/video/newsfeed/2026/5/17/algerias-usm-alger-beat-egypts-zamalek-to-win-caf-cup?traffic_source=rss  
+16. The week in pictures: Trump in China, Cannes festival and Philippines Senate shooting — https://www.france24.com/en/asia-pacific/20260517-the-week-in-pictures-trump-in-china-cannes-festival-philippine-senate-shooting  
+17. ‘Timmy’ the rescued humpback whale confirmed dead — https://www.aljazeera.com/video/newsfeed/2026/5/17/timmy-the-rescued-humpback-whale-confirmed-dead?traffic_source=rss  
+18. Could a leadership change undo Israel’s international isolation? — https://www.aljazeera.com/news/2026/5/17/could-a-leadership-change-undo-israels-international-isolation?traffic_source=rss  
+19. India’s Tata and Dutch giant ASML sign semiconductor deal during Modi visit — https://www.aljazeera.com/news/2026/5/17/indias-tata-and-dutch-giant-asml-sign-semiconductor-deal-during-modi-visit?traffic_source=rss  
+
+### Timeout / hang
+
+- **Agent:** không vào được pipeline → không có timeout step.
+- **Sau khi local chạy:** nếu `--strategy all` hết **7200s/step**, ghi rõ step (`run_profile` / `run_scrapy` / `run_export`) và chạy lần lượt `--strategy rss`, rồi `sitemap`, rồi `html` (cùng `--date`, `--timezone`, `--profile-limit 198`).
+
+### Output files (bước 3–4)
+
+| File | Ghi chú |
+|------|---------|
+| `data/exports/today_final_report.md` | Có trong repo (baseline smoke); **chưa** ghi đè bởi full crawl trên agent |
+| `data/exports/today_articles.csv` / `.parquet` | **Không commit** (có full content) |
+| `data/exports/today_crawl_errors.csv` | Local sau crawl; **không** commit trong scope “chỉ report + metadata” |
+| `data/exports/today_crawl_frontier.csv` | Giống trên |
+| `data/exports/today_source_health.csv` | Giống trên |
+| `data/exports/today_articles_metadata.csv` | Chỉ các cột: `source_id`, `title`, `published_at`, `url`, `content_length`, `quality_score`, `crawl_strategy_used` — **đồng bộ code** trong `WebIntelDB.export_today_articles_metadata_csv`; slice trong repo regenerate từ DB crawl hiện có để khớp schema commit |
+
+### Commit / push (bước 5 — agent)
+
+- **Định commit:** `.ai/CURSOR_WORKLOG.md`, `leon_web_intel/data/exports/today_articles_metadata.csv`, và **fix code** `leon_web_intel/src/storage/db.py` + `leon_web_intel/tests/test_today_mode.py` (seven-column metadata).
+- **Không** `git add`: `today_articles.csv`, `today_articles.parquet`.
+
+### Code đổi trong phiên
+
+- `export_today_articles_metadata_csv` chỉ ghi **7 cột** an toàn (thứ tự như trên).
+
+---
+
 ## Current session (2026-05-17) — Giảm false positive AccessControlDetected (governance)
 
 ### Mục tiêu
