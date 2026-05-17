@@ -12,15 +12,15 @@
 
 ## API Hub (metadata rows in UTC window)
 - **gdelt:** 0
-- **openalex:** 0
+- **openalex:** 40
 - **arxiv:** 0
 - **sec:** 0
-- **world_bank:** 15
-- **pubmed:** 0
+- **world_bank:** 40
+- **pubmed:** 12
 - **github:** 0
-- **crossref:** 0
+- **crossref:** 40
 - **semantic_scholar:** 0
-- **Total API metadata rows:** 15
+- **Total API metadata rows:** 132
 - **API full-text extracts (`api_trafilatura_extract`, window):** 0
 
 ## Scrapy / GDELT lanes (today export)
@@ -34,19 +34,19 @@
 - **Total today articles (export filter):** 19
 
 ## Intelligence totals
-- **Total today intelligence items (articles + API rows; URLs may overlap across lanes):** 34
+- **Total today intelligence items (articles + API rows; URLs may overlap across lanes):** 151
 - **Articles with substantive body text locally (length > 200, window):** 24
 
 ## Errors
-- **Total errors (window):** 123
+- **Total errors (window):** 124
 
 ### Errors by type (window)
 - AccessControlDetected: 115
 - ShortContent: 7
-- ApiHubError: 1
+- ApiHubError: 2
 
 ### API Hub errors by adapter
-- gdelt: 1
+- gdelt: 2
 
 ### Selected crawl signals
 - **AccessControlDetected:** 115
@@ -63,7 +63,10 @@
 - france24_com: 6
 
 ## Top APIs by record count
-- world_bank: 15
+- crossref: 40
+- openalex: 40
+- world_bank: 40
+- pubmed: 12
 
 ## Top titles / URLs (mixed API + Scrapy, up to 50, URL-deduplicated)
 | kind | title | url | detail |
@@ -87,9 +90,30 @@
 | scrapy | Iraq’s new PM Ali al-Zaidi formally takes over | https://www.aljazeera.com/video/newsfeed/2026/5/17/aje-onl-nf_clip-iraqs-new-pm-al-zaidi-formally-takes-over-160526?traffic_source=rss | aljazeera_com |
 | scrapy | Algeria’s USM Alger beat Egypt’s Zamalek to win CAF Cup | https://www.aljazeera.com/video/newsfeed/2026/5/17/algerias-usm-alger-beat-egypts-zamalek-to-win-caf-cup?traffic_source=rss | aljazeera_com |
 | scrapy | Activists troll far-right UK rally with giant pro-immigration clip | https://www.aljazeera.com/video/newsfeed/2026/5/17/aje-onl-nf_clip-led-by-donkeys-hijack-far-right-rally-160526?traffic_source=rss | aljazeera_com |
-| api | GDP (current US$) (FCS) | https://api.worldbank.org/v2/country/FCS/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
-| api | GDP (current US$) (EUU) | https://api.worldbank.org/v2/country/EUU/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
-| api | GDP (current US$) (TEC) | https://api.worldbank.org/v2/country/TEC/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
+| api | DFT-driven insights into (Sr/Ba)2GaBiO6 double perovskites for next-generation optoelectronic and thermoelectric technologies | https://doi.org/10.1038/s41598-026-52151-0 | crossref |
+| api | Penerapan Terapi Dzikir Asmaul Husna Terapi Parameter Hemodinamik Non Invasif Pasien Kritis di Ruang HCU Anggrek 2 RSUD Dr Moewardi | https://doi.org/10.55606/jig.v4i3.9022 | crossref |
+| api | ТЕХНОЛОГІЇ КОМАНДНОГО НАВЧАННЯ У ВИКЛАДАННІ КУРСУ  АНГЛІЙСЬКОЇ МОВИ СТУДЕНТАМ МУЗИЧНИХ СПЕЦІАЛЬНОСТЕЙ | https://doi.org/10.52058/2786-4952-2026-4(62)-1275-1282 | crossref |
+| api | PATHOGENETIC MECHANISMS OF HELICOBACTER  PYLORI INFLUENCE ON THE DEVELOPMENT  OF ROSACEA: A LITERATURE REVIEW | https://doi.org/10.52058/2786-4952-2026-4(62)-1528-1535 | crossref |
+| api | Forensic audit evidence analysis with the triangle fraud theory approach | https://doi.org/10.22219/jaa.v9i1.40938 | crossref |
+| api | ОРГАНІЗАЦІЙНО-ПЕДАГОГІЧНІ УМОВИ ЗАБЕЗПЕЧЕННЯ  ПСИХОЛОГО-ПЕДАГОГІЧНИХ ТА КОРЕКЦІЙНО-РОЗВИТКОВИХ  ПОСЛУГ ДІТЯМ З ОСОБЛИВИМИ ОСВІТНІМИ ПОТРЕБАМИ У  ЗАКЛАДАХ ЗАГАЛЬНОЇ СЕРЕДНЬОЇ ОСВІТИ | https://doi.org/10.52058/2786-4952-2026-4(62)-4018-4030 | crossref |
+| api | SALUTOGENIC PERSPECTIVE ON FACIAL TRAUMA: SENSE   OF COHERENCE AS A PSYCHOLOGICAL RESOURCE IN   THE CONTEXT OF VISIBLE CHANGES IN APPEARANCE | https://doi.org/10.52058/2786-4952-2026-4(62)-3144-3163 | crossref |
+| api | ВИКОРИСТАННЯ МЕТОДІВ 3D ВІЗУАЛІЗАЦІЇ ДЛЯ   ПЛАНУВАННЯ МІНІІНВАЗИВНОГО ВТРУЧАННЯ | https://doi.org/10.52058/2786-4952-2026-4(62)-2451-2466 | crossref |
+| api | SCAFFOLDING AS A STRATEGY FOR INTEGRATING CLINICAL AND  COMMUNICATION SKILLS IN THE TEACHING OF “GENERAL  PRACTICE – FAMILY MEDICINE” AT UNDERGRADUATE LEVEL: THE  EXPERIENCE OF BUKOVINIAN STATE MEDICA | https://doi.org/10.52058/2786-4952-2026-4(62)-157-165 | crossref |
+| api | МОЖЛИВОСТІ ВИКОРИСТАННЯ СИМУЛЯЦІЙНИХ СИСТЕМ ТА  ШТУЧНОГО ІНТЕЛЕКТУ У СУЧАСНІЙ ПІДГОТОВЦІ   ХІРУРГА НА ЕТАПІ ІНТЕРНАТУРИ | https://doi.org/10.52058/2786-4952-2026-4(62)-628-640 | crossref |
+| api | DIGITAL EDUCATIONAL ENVIRONMENT AS A TOOL FOR  MODERNIZATION OF GENERAL SECONDARY EDUCATION  INSTITUTIONS IN THE CONDITIONS OF A DIGITAL SOCIETY | https://doi.org/10.52058/2786-4952-2026-4(62)-46-54 | crossref |
+| api | ПСИХОЕДУКАЦІЯ У КОНТЕКСТІ ТРАВМАТИЧНОГО ДОСВІДУ | https://doi.org/10.52058/2786-4952-2026-4(62)-3863-3873 | crossref |
+| api | Assessing the suitability of automated registration and segmentation for dosimetry calculations in SIRT treatment planning. | https://pubmed.ncbi.nlm.nih.gov/42143172/ | pubmed |
+| api | Predictors of pathologic complete response in triple‑negative breast cancer treated with neoadjuvant chemotherapy: a systematic review and meta-analysis. | https://pubmed.ncbi.nlm.nih.gov/42143190/ | pubmed |
+| api | Synergistic interaction between lead and cadmium via metal-transporter gene upregulation in mice. | https://pubmed.ncbi.nlm.nih.gov/42143191/ | pubmed |
+| api | A novel dynamic cardiac phantom for comparing blood pool and myocardial perfusion tracers: initial evaluation with CZT-ERNA and PET-MPI. | https://pubmed.ncbi.nlm.nih.gov/42143200/ | pubmed |
+| api | Transcriptome-derived variants in milk reveal host response signatures to subclinical intramammary infection in Holstein cattle. | https://pubmed.ncbi.nlm.nih.gov/42143393/ | pubmed |
+| api | Accuracy of 3 Intraoral and 1 Extraoral Digital Scanning Systems for Multiple Laminate Veneer Preparations: An In Vitro Study. | https://pubmed.ncbi.nlm.nih.gov/42143400/ | pubmed |
+| api | A Young Woman With Ulcerative Colitis Presenting With Facial Diplegia, a Variant of Guillain-Barré Syndrome. | https://pubmed.ncbi.nlm.nih.gov/42143401/ | pubmed |
+| api | Comments on "Immune Checkpoint Inhibitor-Based Adjuvant Treatment Versus Surveillance in Curatively Treated Hepatocellular Carcinoma: A Systematic Review and meta-Analysis". | https://pubmed.ncbi.nlm.nih.gov/42143560/ | pubmed |
+| api | Asbestos-Related Respiratory Diseases in Spain: Insights From the Spanish Registry. | https://pubmed.ncbi.nlm.nih.gov/42143561/ | pubmed |
+| api | Nutrition impact symptoms and the risk of malnutrition, frailty, and sarcopenia in adults with cancer: A cross-sectional latent class analysis. | https://pubmed.ncbi.nlm.nih.gov/42143564/ | pubmed |
+| api | Clarifying effect-size reporting and causal interpretation in exclusive enteral nutrition for Crohn's disease-related intra-abdominal abscess. | https://pubmed.ncbi.nlm.nih.gov/42143565/ | pubmed |
+| api | Propofol-induced hypertriglyceridemia in critically ill trauma patients requiring nutrition therapy: A descriptive cohort study. | https://pubmed.ncbi.nlm.nih.gov/42143567/ | pubmed |
 | api | GDP (current US$) (ECA) | https://api.worldbank.org/v2/country/ECA/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
 | api | GDP (current US$) (ECS) | https://api.worldbank.org/v2/country/ECS/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
 | api | GDP (current US$) (EMU) | https://api.worldbank.org/v2/country/EMU/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
@@ -97,11 +121,6 @@
 | api | GDP (current US$) (EAP) | https://api.worldbank.org/v2/country/EAP/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
 | api | GDP (current US$) (EAS) | https://api.worldbank.org/v2/country/EAS/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
 | api | GDP (current US$) (EAR) | https://api.worldbank.org/v2/country/EAR/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
-| api | GDP (current US$) (CEB) | https://api.worldbank.org/v2/country/CEB/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
-| api | GDP (current US$) (CSS) | https://api.worldbank.org/v2/country/CSS/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
-| api | GDP (current US$) (ARB) | https://api.worldbank.org/v2/country/ARB/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
-| api | GDP (current US$) (AFW) | https://api.worldbank.org/v2/country/AFW/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
-| api | GDP (current US$) (AFE) | https://api.worldbank.org/v2/country/AFE/indicator/NY.GDP.MKTP.CD?format=json&mrv=5 | world_bank |
 
 ## Output files (today slice)
 - `data/exports/today_final_report.md` (this file)
