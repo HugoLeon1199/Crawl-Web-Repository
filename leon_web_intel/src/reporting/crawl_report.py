@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -14,15 +16,46 @@ def write_today_crawl_report(
     *,
     target_date: str | None,
     timezone_name: str,
+    run_meta_path: Path | None = None,
 ) -> None:
-    """Markdown report focused on public-discovery \"today\" articles."""
+    """Markdown report for public-discovery \"today\" slice + GDELT + full-run meta."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
     stats = db.get_today_summary_stats(target_date_str=target_date, timezone_name=timezone_name)
-    articles = sorted(
-        stats["today_articles"],
+    target_cal = str(stats["target_date"])
+    articles = stats["today_articles"]
+
+    strat_counts = Counter(str(a.get("crawl_strategy_used") or "unknown") for a in articles)
+    rss_n = int(strat_counts.get("rss_then_article_extract", 0))
+    sm_n = int(strat_counts.get("sitemap_then_article_extract", 0))
+    html_n = int(strat_counts.get("html_then_trafilatura", 0))
+    gdelt_art_n = int(strat_counts.get("gdelt_then_article_extract", 0))
+
+    gdelt_discovered = db.count_gdelt_doc_hits(target_calendar_date=target_cal, timezone_name=timezone_name)
+    gdelt_extracted_window = db.count_gdelt_extracted_in_window(target_date_str=target_date, timezone_name=timezone_name)
+
+    global_stats = db.get_crawl_summary_stats()
+    profile_sources = int(global_stats.get("total_sources") or 0)
+
+    err_win = stats.get("errors_by_type_window") or {}
+    access_n = int(err_win.get("AccessControlDetected", 0))
+    short_n = int(err_win.get("ShortContent", 0))
+    not_today_err = int(stats.get("not_today_errors") or 0)
+
+    sorted_arts = sorted(
+        articles,
         key=lambda r: (float(r.get("quality_score") or 0), str(r.get("title") or "")),
         reverse=True,
-    )[:10]
+    )[:50]
+
+    meta_cmd = ""
+    meta_rid = ""
+    if run_meta_path and run_meta_path.is_file():
+        try:
+            meta = json.loads(run_meta_path.read_text(encoding="utf-8"))
+            meta_cmd = str(meta.get("full_run_command") or meta.get("argv_join") or "").strip()
+            meta_rid = str(meta.get("run_id") or "").strip()
+        except (json.JSONDecodeError, OSError):
+            meta_cmd = ""
 
     lines: list[str] = [
         "# Today Crawl Report",
@@ -33,51 +66,68 @@ def write_today_crawl_report(
         f"- UTC window: `{stats['window_start_utc']}` → `{stats['window_end_utc']}`",
         "",
         "## Totals",
-        f"- Profile sources (global DB): {db.get_crawl_summary_stats()['total_sources']}",
-        f"- **Today articles (exported filter):** {stats['today_article_count']}",
+        f"- **Sources profiled (global DB):** {profile_sources}",
+        f"- **GDELT ArtList rows stored (this day+TZ):** {gdelt_discovered}",
+        f"- **GDELT extracted articles (window by extracted_at):** {gdelt_extracted_window}",
+        f"- **Today articles (RSS lane, export filter):** {rss_n}",
+        f"- **Today articles (sitemap lane, export filter):** {sm_n}",
+        f"- **Today articles (HTML lane, export filter):** {html_n}",
+        f"- **Today articles (GDELT lane, export filter):** {gdelt_art_n}",
+        f"- **Total today articles (export filter):** {stats['today_article_count']}",
         f"- Errors logged (UTC window): {stats['total_errors_window']}",
         f"- Frontier skipped **NotToday** (seen in window): {stats['not_today_skipped_frontier']}",
-        f"- **NotToday** crawl_errors (window): {stats['not_today_errors']}",
-        f"- **AccessControlDetected** (window): {stats['access_control_window']}",
+        f"- **NotToday** crawl_errors (window): {not_today_err}",
+        f"- **AccessControlDetected** (window): {access_n}",
+        f"- **ShortContent** (window): {short_n}",
         "",
         "## Errors By Type (window)",
-        _fmt_dict_counts(stats.get("errors_by_type_window") or {}).rstrip(),
+        _fmt_dict_counts(err_win).rstrip(),
         "",
         "## Articles By Strategy (today export)",
-        _fmt_dict_counts(stats.get("articles_by_strategy") or {}).rstrip(),
+        _fmt_dict_counts(dict(strat_counts)).rstrip(),
         "",
         "## Top Sources By Today Articles",
         _fmt_top_sources(stats.get("top_sources_today") or []).rstrip(),
         "",
-        "## Top Articles (up to 10)",
+        "## Top Articles (up to 50)",
         "| source_id | title | published_at | url | quality_score |",
         "|---|---|---|---|---|",
     ]
-    for r in articles:
-        title = str(r.get("title") or "").replace("|", "\\|").replace("\n", " ")[:120]
+    for r in sorted_arts:
+        title = str(r.get("title") or "").replace("|", "\\|").replace("\n", " ")[:200]
         lines.append(
             f"| {r.get('source_id') or ''} | {title} | {r.get('published_at') or ''} | {r.get('url') or ''} | {r.get('quality_score') or ''} |"
         )
-    if not articles:
+    if not sorted_arts:
         lines.append("| — | — | — | — | — |")
 
     lines.extend(
         [
             "",
             "## Limitations",
-            "- Public discovery only (RSS / sitemap `lastmod` / homepage links); no paywall, login, or CAPTCHA bypass.",
+            "- Public discovery only (GDELT DOC ArtList + RSS / sitemap `lastmod` / bounded homepage links); no paywall, login, CAPTCHA bypass.",
+            "- GDELT: API caps 250 rows per request; tiling/bisection reduces truncation but extreme volumes may still be incomplete.",
             "- Some sites do not expose every same-day article in feeds or sitemap.",
-            "- HTML discovery is bounded by depth and URL caps; not exhaustive site crawl.",
+            "- HTML discovery is bounded by depth and URL caps per source; not exhaustive site crawl.",
             "",
         ]
     )
+
+    lines.extend(["## Full run command", ""])
+    if meta_cmd:
+        lines.append(f"- `{meta_cmd}`")
+    else:
+        lines.append("- *(No `today_run_meta.json` found — run `run_today.py` to record the command.)*")
+    if meta_rid:
+        lines.extend(["", "## Run ID", "", f"- `{meta_rid}`", ""])
+
     out_path.write_text("\n".join(lines), encoding="utf-8")
 
 
 def _fmt_dict_counts(values: dict[str, int]) -> str:
     if not values:
         return "- None\n"
-    return "".join(f"- {key}: {value}\n" for key, value in values.items())
+    return "".join(f"- {key}: {value}\n" for key, value in sorted(values.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
 def _fmt_top_sources(rows: list[dict[str, Any]]) -> str:

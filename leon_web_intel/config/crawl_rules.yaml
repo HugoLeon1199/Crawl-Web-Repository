@@ -2,14 +2,16 @@ user_agent: "LeonWebIntelBot/0.1 (+local research project)"
 request_timeout_seconds: 20
 max_retries: 2
 default_delay_seconds: 1.5
-concurrency: 5
+concurrency: 20
+scrapy_concurrent_requests: 32
+scrapy_concurrent_requests_per_domain: 3
 profile_cache_days: 7
 http_cache_enabled: true
 
-max_rss_candidates: 20
-max_sitemap_candidates: 10
-max_sitemaps_to_parse_in_profiler: 5
-max_urls_from_sitemap_in_profiler: 200
+max_rss_candidates: 500
+max_sitemap_candidates: 200
+max_sitemaps_to_parse_in_profiler: 50
+max_urls_from_sitemap_in_profiler: 50000
 
 min_extract_text_length: 300
 min_article_content_length: 300

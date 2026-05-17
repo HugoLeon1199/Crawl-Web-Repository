@@ -14,6 +14,8 @@ if str(SRC) not in sys.path:
 
 from reporting.crawl_report import write_final_crawl_report, write_today_crawl_report  # noqa: E402
 from storage.db import WebIntelDB  # noqa: E402
+from utils.today_filter import resolve_calendar_date, target_date_range  # noqa: E402
+from reporting.gdelt_report import write_today_gdelt_report  # noqa: E402
 
 
 def main() -> int:
@@ -60,7 +62,11 @@ def main() -> int:
         "crawl_frontier_csv": out_dir / "today_crawl_frontier.csv",
         "source_health_csv": out_dir / "today_source_health.csv",
         "final_report": out_dir / "today_final_report.md",
+        "gdelt_metadata_csv": out_dir / "today_gdelt_metadata.csv",
+        "gdelt_report_md": out_dir / "today_gdelt_report.md",
     }
+
+    meta_path = out_dir / "today_run_meta.json"
 
     db = WebIntelDB(db_path)
     try:
@@ -78,7 +84,32 @@ def main() -> int:
             db.export_today_source_health_csv(
                 today_paths["source_health_csv"], target_date_str=args.date, timezone_name=args.timezone
             )
-            write_today_crawl_report(db, today_paths["final_report"], target_date=args.date, timezone_name=args.timezone)
+            write_today_crawl_report(
+                db,
+                today_paths["final_report"],
+                target_date=args.date,
+                timezone_name=args.timezone,
+                run_meta_path=meta_path,
+            )
+
+            target_cal = str(resolve_calendar_date(args.date, args.timezone))
+            db.export_gdelt_doc_hits_csv(
+                today_paths["gdelt_metadata_csv"], target_calendar_date=target_cal, timezone_name=args.timezone
+            )
+            st_u, en_u = target_date_range(args.date, args.timezone)
+            hits_n = db.count_gdelt_doc_hits(target_calendar_date=target_cal, timezone_name=args.timezone)
+            gx = db.gdelt_day_extract_stats(target_calendar_date=target_cal, timezone_name=args.timezone)
+            write_today_gdelt_report(
+                today_paths["gdelt_report_md"],
+                target_calendar_date=target_cal,
+                timezone_name=args.timezone,
+                utc_window=(st_u, en_u),
+                query="(see gdelt run / api_query column in CSV)",
+                total_hits=hits_n,
+                extracted_ok=int(gx["extracted_linked"]),
+                extract_errors=int(gx["extract_errors_logged"]),
+                argv=["run_export.py", "--today-only", "--date", args.date, "--timezone", args.timezone],
+            )
 
         db.export_articles_csv(paths["articles_csv"])
         db.export_articles_metadata_csv(paths["articles_metadata_csv"])
@@ -95,6 +126,7 @@ def main() -> int:
     if args.today_only:
         for path in today_paths.values():
             print(path.resolve())
+        print(meta_path.resolve())
     for path in paths.values():
         print(path.resolve())
     return 0

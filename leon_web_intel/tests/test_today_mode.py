@@ -94,14 +94,16 @@ def test_run_today_command_building() -> None:
     cmds = build_today_commands(
         python_executable="python",
         input_path=Path("config/sources_raw.txt"),
-        profile_limit=198,
+        profile_limit_cli=198,
         strategy="rss",
         force_refresh=True,
         run_id="rid",
         date_arg="today",
         timezone_arg="Europe/Amsterdam",
-        max_urls_per_source=500,
+        max_urls_per_source_resolved=500,
         close_spider_timeout=900,
+        profile_concurrency=None,
+        skip_profile=False,
     )
     assert "run_profile.py" in cmds[0][1]
     assert "--today-only" in cmds[1]

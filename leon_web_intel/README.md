@@ -77,18 +77,24 @@ Skipped in this phase (sources are not loaded for Scrapy): `api_first`, `metadat
 
 ## TODAY FULL ARTICLE CRAWL
 
-Collect **all publicly discoverable articles for one calendar day** per source (RSS entry dates, sitemap `lastmod`, and bounded homepage/link discovery with URL date heuristics). Governed the same way as v1: **no paywall/login/CAPTCHA bypass**, no proxy/stealth, no private content.
+Collect **all publicly discoverable articles for one calendar day** per source (RSS entry dates, sitemap `lastmod`, and bounded homepage/link discovery with URL date heuristics). Optional **GDELT DOC ArtList** pass fills `gdelt_doc_hits` + can extract into `articles`. Governed like v1: **no paywall/login/CAPTCHA bypass**, no proxy/stealth.
 
-**Primary command**
+**Limits:** `--profile-limit 0` and Scrapy `--limit 0` mean **all** profiled sources from the input file. `--max-urls-per-source 0` (today mode) uses a high safety ceiling (~100k/source). Profiler RSS/sitemap discovery caps are raised in `crawl_rules.yaml` for full runs.
+
+**Full global today run (profile all sources + GDELT + Scrapy + exports)**
 
 ```bash
-python run_today.py --input config/sources_raw.txt --strategy all --date today --timezone Europe/Amsterdam --profile-limit 198 --max-urls-per-source 1000 --step-timeout-seconds 1800 --close-spider-timeout 1200
+python run_gdelt_today.py --date today --timezone Europe/Amsterdam --query "*" --max-records 0 --extract-content
+
+python run_today.py --input config/sources_raw.txt --strategy all --include-gdelt --gdelt-query "*" --gdelt-max-records 0 --gdelt-extract-content --date today --timezone Europe/Amsterdam --profile-limit 0 --max-urls-per-source 0 --step-timeout-seconds 14400 --close-spider-timeout 10800 --force-refresh
 ```
+
+**Skip re-profiling** (reuse DuckDB profiles): add `--skip-profile` to `run_today.py`.
 
 Direct Scrapy (after profiling), today-only:
 
 ```bash
-python run_scrapy.py --strategy all --today-only --date today --timezone Europe/Amsterdam --max-urls-per-source 1000 --close-spider-timeout 900 --limit 198
+python run_scrapy.py --strategy all --today-only --date today --timezone Europe/Amsterdam --max-urls-per-source 0 --close-spider-timeout 10800 --limit 0
 ```
 
 Today-filtered exports + report:
@@ -103,10 +109,13 @@ python run_export.py --today-only --date today --timezone Europe/Amsterdam
 |----------|------|
 | Today articles CSV | `data/exports/today_articles.csv` |
 | Today articles Parquet | `data/exports/today_articles.parquet` |
+| Today articles metadata (safe columns) | `data/exports/today_articles_metadata.csv` |
 | Today crawl errors | `data/exports/today_crawl_errors.csv` |
 | Today frontier snapshot | `data/exports/today_crawl_frontier.csv` |
 | Today source health slice | `data/exports/today_source_health.csv` |
 | Today Markdown report | `data/exports/today_final_report.md` |
+| GDELT metadata CSV | `data/exports/today_gdelt_metadata.csv` |
+| GDELT Markdown report | `data/exports/today_gdelt_report.md` |
 
 Full-database exports (`articles.csv`, `final_crawl_report.md`, …) are still written whenever you run `run_export.py`.
 

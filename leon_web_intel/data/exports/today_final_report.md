@@ -6,12 +6,19 @@
 - UTC window: `2026-05-16 22:00:00+00:00` → `2026-05-17 22:00:00+00:00`
 
 ## Totals
-- Profile sources (global DB): 16
-- **Today articles (exported filter):** 19
+- **Sources profiled (global DB):** 16
+- **GDELT ArtList rows stored (this day+TZ):** 0
+- **GDELT extracted articles (window by extracted_at):** 0
+- **Today articles (RSS lane, export filter):** 19
+- **Today articles (sitemap lane, export filter):** 0
+- **Today articles (HTML lane, export filter):** 0
+- **Today articles (GDELT lane, export filter):** 0
+- **Total today articles (export filter):** 19
 - Errors logged (UTC window): 122
 - Frontier skipped **NotToday** (seen in window): 0
 - **NotToday** crawl_errors (window): 0
 - **AccessControlDetected** (window): 115
+- **ShortContent** (window): 7
 
 ## Errors By Type (window)
 - AccessControlDetected: 115
@@ -24,7 +31,7 @@
 - aljazeera_com: 13
 - france24_com: 6
 
-## Top Articles (up to 10)
+## Top Articles (up to 50)
 | source_id | title | published_at | url | quality_score |
 |---|---|---|---|---|
 | aljazeera_com | World Cup 2026: FIFA holds ‘positive’ talks with Iranian football officials | 2026-05-17 | https://www.aljazeera.com/sports/2026/5/17/fifa-holds-positive-talks-with-iranian-football-officials-on-world-cup?traffic_source=rss | 10.0 |
@@ -37,8 +44,22 @@
 | france24_com | Middle East live: USS Ford returns from Iran war after longest deployment since Vietnam | 2026-05-17 | https://www.france24.com/en/middle-east/20260517-middle-east-live-uss-ford-returns-from-iran-war-after-longest-deployment-since-vietnam | 10.0 |
 | aljazeera_com | Iran war day 79: Israel’s relentless bombardment of Lebanon continues | 2026-05-17 | https://www.aljazeera.com/news/2026/5/17/iran-war-day-79-tehran-to-unveil-hormuz-toll-plan-israel-bombs-lebanon?traffic_source=rss | 10.0 |
 | aljazeera_com | Iran plans Hormuz tolls; Trump warns of ‘very bad time’ over stalled talks | 2026-05-17 | https://www.aljazeera.com/news/liveblog/2026/5/17/iran-war-live-tehran-eyes-tolls-in-hormuz-trump-warns-of-very-bad-time?traffic_source=rss | 10.0 |
+| aljazeera_com | India’s Tata and Dutch giant ASML sign semiconductor deal during Modi visit | 2026-05-17 | https://www.aljazeera.com/news/2026/5/17/indias-tata-and-dutch-giant-asml-sign-semiconductor-deal-during-modi-visit?traffic_source=rss | 10.0 |
+| aljazeera_com | Could a leadership change undo Israel’s international isolation? | 2026-05-17 | https://www.aljazeera.com/news/2026/5/17/could-a-leadership-change-undo-israels-international-isolation?traffic_source=rss | 10.0 |
+| france24_com | Bulgaria wins 2026 Eurovision, Israel lands a nail-biting second | 2026-05-17 | https://www.france24.com/en/culture/20260517-bulgaria-s-bangaranga-wins-eurovision-with-israel-second | 10.0 |
+| aljazeera_com | ‘Timmy’ the rescued humpback whale confirmed dead | 2026-05-17 | https://www.aljazeera.com/video/newsfeed/2026/5/17/timmy-the-rescued-humpback-whale-confirmed-dead?traffic_source=rss | 9.0 |
+| aljazeera_com | Tunisians rally amid economic crisis and political arrests | 2026-05-17 | https://www.aljazeera.com/video/newsfeed/2026/5/17/tunisians-rally-amid-economic-crisis-and-political-arrests?traffic_source=rss | 9.0 |
+| france24_com | The week in pictures: Trump in China, Cannes festival and Philippines Senate shooting | 2026-05-17 | https://www.france24.com/en/asia-pacific/20260517-the-week-in-pictures-trump-in-china-cannes-festival-philippine-senate-shooting | 9.0 |
+| aljazeera_com | Iraq’s new PM Ali al-Zaidi formally takes over | 2026-05-17 | https://www.aljazeera.com/video/newsfeed/2026/5/17/aje-onl-nf_clip-iraqs-new-pm-al-zaidi-formally-takes-over-160526?traffic_source=rss | 9.0 |
+| aljazeera_com | Algeria’s USM Alger beat Egypt’s Zamalek to win CAF Cup | 2026-05-17 | https://www.aljazeera.com/video/newsfeed/2026/5/17/algerias-usm-alger-beat-egypts-zamalek-to-win-caf-cup?traffic_source=rss | 9.0 |
+| aljazeera_com | Activists troll far-right UK rally with giant pro-immigration clip | 2026-05-17 | https://www.aljazeera.com/video/newsfeed/2026/5/17/aje-onl-nf_clip-led-by-donkeys-hijack-far-right-rally-160526?traffic_source=rss | 9.0 |
 
 ## Limitations
-- Public discovery only (RSS / sitemap `lastmod` / homepage links); no paywall, login, or CAPTCHA bypass.
+- Public discovery only (GDELT DOC ArtList + RSS / sitemap `lastmod` / bounded homepage links); no paywall, login, CAPTCHA bypass.
+- GDELT: API caps 250 rows per request; tiling/bisection reduces truncation but extreme volumes may still be incomplete.
 - Some sites do not expose every same-day article in feeds or sitemap.
-- HTML discovery is bounded by depth and URL caps; not exhaustive site crawl.
+- HTML discovery is bounded by depth and URL caps per source; not exhaustive site crawl.
+
+## Full run command
+
+- *(No `today_run_meta.json` found — run `run_today.py` to record the command.)*

@@ -76,7 +76,7 @@ def run_scrapy_engine(
         closespider_timeout=close_spider_timeout,
         today_only=today_only,
         target_date=target_date,
-        timezone_name=timezone_name,
+            timezone=timezone_name,
     )
 
     configure_logging(settings={"LOG_LEVEL": settings.get("LOG_LEVEL")})
@@ -105,7 +105,7 @@ def run_scrapy_engine(
             max_urls_per_source=max_urls_per_source,
         )
     if buckets["html"]:
-        html_cap = min(300, max_urls_per_source) if today_only else max_articles_per_source
+        html_cap = max_urls_per_source if today_only else max_articles_per_source
         process.crawl(
             HtmlArticleSpider,
             sources=buckets["html"],

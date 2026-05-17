@@ -20,7 +20,9 @@ class CrawlRules(BaseModel):
     request_timeout_seconds: float = 20.0
     max_retries: int = 2
     default_delay_seconds: float = 1.5
-    concurrency: int = 5
+    concurrency: int = 20
+    scrapy_concurrent_requests: int = 32
+    scrapy_concurrent_requests_per_domain: int = 3
     profile_cache_days: int = 7
     http_cache_enabled: bool = True
 

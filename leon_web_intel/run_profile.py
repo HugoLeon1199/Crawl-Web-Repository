@@ -500,7 +500,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             continue
     uniq = dedupe_sources(norms)
-    if args.limit is not None:
+    if args.limit is not None and args.limit > 0:
         uniq = uniq[: args.limit]
     source_ids = {n.source_id for n in uniq}
 

@@ -3,6 +3,46 @@
 **Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
 **Project:** Leon Global Web Intelligence Engine  
 
+## Current session (2026-05-17) — TODAY GLOBAL full-run plumbing + GDELT DOC lane
+
+### Pytest
+
+- **Interpreter:** `.tools/python312/python.exe` (cwd `leon_web_intel`).
+- **Command:** `python -m pytest -v --tb=short`
+- **Result:** **44 passed** (~4s).
+
+### Code delivered
+
+- **`utils/full_run.py`** — `resolve_max_urls_per_source` (0 → ~100k cap), `profile_limit_arg` (≤0 → no profiler `--limit`).
+- **`run_profile.py`** — `--limit` applies only when **> 0** (0 = all URLs from input).
+- **`run_scrapy.py`** / **`db_source_loader`** — `--limit 0` already meant all sources; today `--max-urls-per-source 0` resolves to full-run URL ceiling.
+- **`runner.py`** — removed HTML today `min(300, …)` cap; fixed **`timezone=`** kwarg for `HtmlArticleSpider`.
+- **`config/crawl_rules.yaml`** + **`settings.py`** — profiler concurrency **20**; higher RSS/sitemap profiler caps; Scrapy **`scrapy_concurrent_requests: 32`**, **`scrapy_concurrent_requests_per_domain: 3`**; `RETRY_TIMES` capped at 2.
+- **`scrapy_engine/settings.py`** — wires Scrapy concurrency + timeout from YAML.
+- **GDELT:** `collectors/gdelt_collector.py` (15-minute UTC tiling + bisection on full 250-record pages), `run_gdelt_today.py`, DuckDB **`gdelt_doc_hits`**, export/report helpers, `*` query maps to literal broad query (GDELT still max 250/request).
+- **`run_today.py`** — `--profile-limit 0`, `--max-urls-per-source 0`, `--skip-profile`, `--profile-concurrency`, `--include-gdelt`, `--gdelt-query`, `--gdelt-max-records`, `--gdelt-extract-content`; writes **`data/exports/today_run_meta.json`** (`full_run_command`, `run_id`).
+- **`run_export.py`** — extended **`today_final_report.md`** via `write_today_crawl_report(..., run_meta_path)`; refreshes **`today_gdelt_metadata.csv`** / **`today_gdelt_report.md`** from DB.
+- **`reporting/crawl_report.py`** — report sections: sources profiled, GDELT counts, per-lane today counts, errors incl. AccessControl / ShortContent / NotToday, top 50 articles, limitations, full command.
+
+### Full crawl command (run locally; not executed to completion in Cursor agent)
+
+```bash
+python run_today.py --input config/sources_raw.txt --strategy all --include-gdelt --gdelt-query "*" --gdelt-max-records 0 --gdelt-extract-content --date today --timezone Europe/Amsterdam --profile-limit 0 --max-urls-per-source 0 --step-timeout-seconds 14400 --close-spider-timeout 10800 --force-refresh
+```
+
+If **`strategy all`** times out: rerun per strategy with **`--skip-profile`** after a successful profile step.
+
+### GitHub-safe commits (this push)
+
+- **Committed:** code, `README.md`, `.ai/CURSOR_WORKLOG.md`, `today_final_report.md`, `today_articles_metadata.csv`, `today_gdelt_metadata.csv`, `today_gdelt_report.md`.
+- **Not committed:** `today_articles.csv`, `today_articles.parquet`, DuckDB, raw/cache (see `.gitignore`), nor incidental full-DB export churn (`articles_metadata.csv`, …).
+
+### Outputs after local full run
+
+- Full article CSV/Parquet remain **local only**; public repo gets **reports + metadata** listed above.
+
+---
+
 ## Current session (2026-05-16) — Full TODAY crawl (`strategy all`): agent environment + safe metadata
 
 ### Mục tiêu kiểm tra

@@ -145,7 +145,8 @@ def test_scrapy_settings_robots_obey_true(tmp_path: Path) -> None:
     assert d["ROBOTSTXT_OBEY"] is True
     assert d["USER_AGENT"] == rules.user_agent
     assert d["DOWNLOAD_TIMEOUT"] == int(rules.request_timeout_seconds)
-    assert d["CONCURRENT_REQUESTS_PER_DOMAIN"] == 2
+    assert d["CONCURRENT_REQUESTS_PER_DOMAIN"] == 3
+    assert d["CONCURRENT_REQUESTS"] == 32
     assert d["CLOSESPIDER_TIMEOUT"] == 600
     assert d["WEB_INTEL_TODAY_ONLY"] is False
     assert d["WEB_INTEL_TARGET_DATE"] == "today"

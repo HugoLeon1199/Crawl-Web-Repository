@@ -143,6 +143,22 @@ CREATE TABLE IF NOT EXISTS source_health (
   success_rate DOUBLE,
   updated_at TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS gdelt_doc_hits (
+  id TEXT PRIMARY KEY,
+  target_calendar_date TEXT NOT NULL,
+  timezone_name TEXT NOT NULL,
+  url TEXT NOT NULL,
+  title TEXT,
+  seendate TEXT,
+  domain TEXT,
+  api_query TEXT,
+  window_start_utc TIMESTAMP,
+  window_end_utc TIMESTAMP,
+  fetched_at TIMESTAMP,
+  article_id TEXT,
+  extract_error TEXT
+);
 """
 
 
@@ -819,6 +835,90 @@ class WebIntelDB:
             ).fetchdf()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(out_path, index=False)
+
+    def delete_gdelt_doc_hits_for_day(self, *, target_calendar_date: str, timezone_name: str) -> None:
+        with self._lock:
+            self.conn.execute(
+                "DELETE FROM gdelt_doc_hits WHERE target_calendar_date = ? AND timezone_name = ?",
+                [target_calendar_date, timezone_name],
+            )
+
+    def insert_gdelt_doc_hit(self, row: dict[str, Any]) -> None:
+        with self._lock:
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(["?" for _ in row])
+            sql = f"INSERT INTO gdelt_doc_hits ({cols}) VALUES ({placeholders})"
+            self.conn.execute(sql, list(row.values()))
+
+    def update_gdelt_doc_hit_extract(
+        self,
+        hit_id: str,
+        *,
+        article_id: str | None,
+        extract_error: str | None,
+    ) -> None:
+        with self._lock:
+            self.conn.execute(
+                "UPDATE gdelt_doc_hits SET article_id = ?, extract_error = ? WHERE id = ?",
+                [article_id, extract_error, hit_id],
+            )
+
+    def count_gdelt_doc_hits(self, *, target_calendar_date: str, timezone_name: str) -> int:
+        with self._lock:
+            row = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM gdelt_doc_hits
+                WHERE target_calendar_date = ? AND timezone_name = ?
+                """,
+                [target_calendar_date, timezone_name],
+            ).fetchone()
+            return int(row[0] or 0)
+
+    def count_gdelt_extracted_in_window(self, *, target_date_str: str | None, timezone_name: str) -> int:
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        with self._lock:
+            row = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM articles
+                WHERE crawl_strategy_used = 'gdelt_then_article_extract'
+                  AND extracted_at >= ? AND extracted_at < ?
+                """,
+                [start_utc, end_utc],
+            ).fetchone()
+            return int(row[0] or 0)
+
+    def export_gdelt_doc_hits_csv(self, out_path: Path, *, target_calendar_date: str, timezone_name: str) -> None:
+        with self._lock:
+            df = self.conn.execute(
+                """
+                SELECT url, title, seendate, domain, api_query, window_start_utc, window_end_utc,
+                       fetched_at, article_id, extract_error
+                FROM gdelt_doc_hits
+                WHERE target_calendar_date = ? AND timezone_name = ?
+                ORDER BY seendate, url
+                """,
+                [target_calendar_date, timezone_name],
+            ).fetchdf()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        df.to_csv(out_path, index=False)
+
+    def gdelt_day_extract_stats(self, *, target_calendar_date: str, timezone_name: str) -> dict[str, int]:
+        with self._lock:
+            ok = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM gdelt_doc_hits
+                WHERE target_calendar_date = ? AND timezone_name = ? AND article_id IS NOT NULL
+                """,
+                [target_calendar_date, timezone_name],
+            ).fetchone()[0]
+            bad = self.conn.execute(
+                """
+                SELECT COUNT(*) FROM gdelt_doc_hits
+                WHERE target_calendar_date = ? AND timezone_name = ? AND extract_error IS NOT NULL
+                """,
+                [target_calendar_date, timezone_name],
+            ).fetchone()[0]
+        return {"extracted_linked": int(ok or 0), "extract_errors_logged": int(bad or 0)}
 
 
 def new_id() -> str:

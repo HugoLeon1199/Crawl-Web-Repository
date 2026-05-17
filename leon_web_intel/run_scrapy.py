@@ -13,6 +13,7 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from scrapy_engine.runner import run_scrapy_engine  # noqa: E402
+from utils.full_run import resolve_max_urls_per_source  # noqa: E402
 
 
 def main() -> None:
@@ -23,7 +24,7 @@ def main() -> None:
         default="all",
         help="Which profiler strategies to crawl (maps to rss/sitemap/html spiders)",
     )
-    p.add_argument("--limit", type=int, default=50, help="Max sources per spider lane after filters")
+    p.add_argument("--limit", type=int, default=50, help="Max sources per spider lane (0 = all)")
     p.add_argument(
         "--max-articles-per-source",
         type=int,
@@ -66,9 +67,11 @@ def main() -> None:
         type=int,
         default=1000,
         metavar="N",
-        help="Safety cap per source in today mode (RSS/sitemap); HTML lane uses min(300, N)",
+        help="Safety cap per source in today mode (RSS/HTML/sitemap); 0 = full-run ceiling (~100k)",
     )
     args = p.parse_args()
+
+    mu = resolve_max_urls_per_source(args.max_urls_per_source) if args.today_only else args.max_urls_per_source
 
     summary = run_scrapy_engine(
         root=ROOT,
@@ -81,7 +84,7 @@ def main() -> None:
         today_only=bool(args.today_only),
         target_date=args.date,
         timezone_name=args.timezone,
-        max_urls_per_source=args.max_urls_per_source,
+        max_urls_per_source=int(mu),
     )
 
     print("")
@@ -93,7 +96,7 @@ def main() -> None:
     print(f"Crawl errors logged: {summary.errors_logged}")
     print(f"Duplicate content hashes skipped: {summary.duplicates_skipped}")
     if args.today_only:
-        print(f"Today mode: date={args.date!r} timezone={args.timezone!r} max_urls_per_source={args.max_urls_per_source}")
+        print(f"Today mode: date={args.date!r} timezone={args.timezone!r} max_urls_per_source={mu}")
     if args.run_id:
         print(f"Run ID: {args.run_id}")
     print(f"Database: {args.db.resolve()}")
