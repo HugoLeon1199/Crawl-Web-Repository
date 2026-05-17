@@ -7,7 +7,70 @@ Single shared AI workflow file — Leon, ChatGPT, Gemini ↔ Cursor.
 
 ---
 
-## Current session (2026-05-16) — Scrapy scaffold pre-flight patch (runtime + HTML cap + tests)
+## Current session (2026-05-16) — Scrapy layer runtime hardening (`_reserved` + pipeline teardown + offline HTML tests)
+
+### Current task
+
+Make Scrapy scaffold **safe to run**: cap **scheduled** HTTP requests for HTML spider (not only parsed items), close pipeline DB in pytest teardown, add **offline** unit tests; verify CLI `sys.path`; run pytest + smoke CLIs with **`python`** (not broken `py`).
+
+### Files modified
+
+- `leon_web_intel/src/scrapy_engine/spiders/html_article_spider.py` — add **`self._reserved`**. **`start_requests`**: init `_attempted`/`_reserved` to 0; schedule homepage only if `reserved < max`, then **`reserved += 1`** immediately. **`parse_page`**: return if `attempted >= max`; increment **`attempted`** and yield **`ArticleItem`**; return if `attempted >= max` before follows; child loop **`break`** when `reserved >= max`; increment **`reserved`** before each child **`Request`**.
+- `leon_web_intel/tests/test_scrapy_layer.py` — **`pipeline_env`** is a **`yield`** fixture with **`finally: pipe.close_spider(...)`**; add **`test_html_article_spider_schedule_cap_no_network`** and **`test_html_article_spider_max_one_schedules_homepage_only`**.
+
+### Files created / deleted
+
+- *(none)*
+
+### What was fixed (logic)
+
+1. **`_reserved`** counts URLs **queued for download** as soon as **`Request` is yielded**, so the link-expand phase cannot schedule dozens of children before **`parse_page`** runs.
+2. Pipeline tests release DuckDB after each test via **`close_spider`**.
+
+### Commands run (Cursor agent)
+
+Agent shell has **no `python` on PATH** and **no** interpreter at common install paths (see traceback below). Intended local commands:
+
+```bash
+cd leon_web_intel
+python -m pip install -r requirements.txt
+python -m pytest
+python run_profile.py --input config/sources_raw.txt --dry-run
+python run_profile.py --input config/sources_raw.txt --profile-only --limit 10 --force-refresh
+python run_scrapy.py --strategy all --limit 5 --max-articles-per-source 2
+```
+
+### Test / CLI result (this environment)
+
+- **`cmd /c where python`** → *(empty — no `python.exe` on PATH)*  
+- Probed paths: `%LOCALAPPDATA%\Programs\Python\Python313\python.exe`, Python312, WindowsApps `python.exe`, `C:\Python313\python.exe` → **not present** on this runner.
+
+**Leon:** install Python 3.11+ or add **`python.exe`** to PATH (or run with full path), fix **`py.ini`** if using launcher, then rerun the block above.
+
+### Import path check
+
+- **`run_profile.py`** / **`run_scrapy.py`**: both prepend **`leon_web_intel/src`** to **`sys.path`** before imports — run **`cd leon_web_intel`** then **`python run_*.py`** as documented.
+
+### Known issues / limitations
+
+- **`errback`** paths do not decrement **`reserved`** on failure (acceptable for this scaffold).
+- Per-URL robots beyond Scrapy global obey unchanged.
+
+### Notes for ChatGPT review
+
+- Optional: align **`reserved`** with pipeline **`ShortContent`** retries (not in scope).
+
+### Notes for Gemini review
+
+- **`reserved`** vs **`attempted`** divergence when many responses fail — whether to allow “fill-up” scheduling later.
+
+### Next suggested step
+
+- Leon runs **`python -m pytest`** locally; then small **`run_scrapy`** smoke; commit/push.
+
+---
+
+## Previous session (2026-05-16) — Scrapy scaffold pre-flight patch (runtime + HTML cap + tests)
 
 ### Current task
 

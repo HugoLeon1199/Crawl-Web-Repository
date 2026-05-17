@@ -31,6 +31,7 @@ class HtmlArticleSpider(scrapy.Spider):
         self.max_depth = int(max_depth)
         self.max_links_per_page = int(max_links_per_page)
         self._attempted: dict[str, int] = {}
+        self._reserved: dict[str, int] = {}
 
     def _sched(self, n: int = 1) -> None:
         if self.summary:
@@ -52,10 +53,14 @@ class HtmlArticleSpider(scrapy.Spider):
         for row in self.sources:
             sid = row["source_id"]
             self._attempted.setdefault(sid, 0)
+            self._reserved.setdefault(sid, 0)
             home = row["_homepage_url"]
             if not home:
                 continue
+            if self._reserved[sid] >= self.max_articles_per_source:
+                continue
             active = row.get("_source_active", True)
+            self._reserved[sid] += 1
             self._sched(1)
             yield scrapy.Request(
                 home,
@@ -83,15 +88,15 @@ class HtmlArticleSpider(scrapy.Spider):
             source_active=active,
         )
 
-        if depth >= self.max_depth:
+        if self._attempted.get(sid, 0) >= self.max_articles_per_source:
             return
 
-        if self._attempted.get(sid, 0) >= self.max_articles_per_source:
+        if depth >= self.max_depth:
             return
 
         links = response.css("a::attr(href)").getall()[: self.max_links_per_page]
         for href in links:
-            if self._attempted.get(sid, 0) >= self.max_articles_per_source:
+            if self._reserved.get(sid, 0) >= self.max_articles_per_source:
                 break
             if not href or href.startswith(("#", "mailto:", "javascript:", "tel:")):
                 continue
@@ -100,6 +105,7 @@ class HtmlArticleSpider(scrapy.Spider):
                 continue
             if not self._same_registrable_host(abs_u, response.url):
                 continue
+            self._reserved[sid] += 1
             self._sched(1)
             yield scrapy.Request(
                 abs_u,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Generator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,8 @@ from typing import Any
 import duckdb
 import pytest
 import scrapy
+from scrapy import Request
+from scrapy.http import HtmlResponse
 from scrapy.settings import Settings
 
 from scrapy_engine.db_source_loader import load_sources_for_scrapy
@@ -17,6 +20,7 @@ from scrapy_engine.items import ArticleItem
 from scrapy_engine.pipelines import WebIntelArticlePipeline
 from scrapy_engine.runner import ScrapyRunSummary
 from scrapy_engine.settings import build_scrapy_settings_dict
+from scrapy_engine.spiders.html_article_spider import HtmlArticleSpider
 from settings import CrawlRules
 from storage.db import DDL, WebIntelDB
 
@@ -145,7 +149,7 @@ def test_scrapy_settings_robots_obey_true(tmp_path: Path) -> None:
 
 
 @pytest.fixture
-def pipeline_env(tmp_path: Path) -> tuple[WebIntelArticlePipeline, Path]:
+def pipeline_env(tmp_path: Path) -> Generator[tuple[WebIntelArticlePipeline, Path], None, None]:
     db_path = tmp_path / "web_intel.duckdb"
     rules_path = tmp_path / "crawl_rules.yaml"
     raw_root = tmp_path / "raw"
@@ -188,8 +192,12 @@ def pipeline_env(tmp_path: Path) -> tuple[WebIntelArticlePipeline, Path]:
             self.settings = settings
 
     pipe = WebIntelArticlePipeline.from_crawler(FakeCrawler(st))
-    pipe.open_spider(scrapy.Spider(name="test"))
-    return pipe, db_path
+    spider = scrapy.Spider(name="test")
+    pipe.open_spider(spider)
+    try:
+        yield pipe, db_path
+    finally:
+        pipe.close_spider(spider)
 
 
 def test_pipeline_blocks_access_control(pipeline_env: tuple[WebIntelArticlePipeline, Path]) -> None:
@@ -234,3 +242,66 @@ def test_pipeline_short_content_to_crawl_errors(pipeline_env: tuple[WebIntelArti
         db.close()
     assert arts == 0
     assert "ShortContent" in types
+
+
+def test_html_article_spider_schedule_cap_no_network() -> None:
+    """Reserved slots cap scheduled Requests before responses complete."""
+    sid = "ex_com"
+    row: dict[str, Any] = {
+        "source_id": sid,
+        "_homepage_url": "https://example.com/",
+        "_source_active": True,
+    }
+    spider = HtmlArticleSpider(sources=[row], max_articles_per_source=2, max_depth=2, summary=None)
+
+    starts = list(spider.start_requests())
+    assert len(starts) == 1
+    assert isinstance(starts[0], Request)
+    assert spider._reserved[sid] == 1
+    assert spider._attempted[sid] == 0
+
+    html = "<html><body>" + "".join(f'<a href="https://example.com/p{i}">x</a>' for i in range(50)) + "</body></html>"
+    resp = HtmlResponse(url="https://example.com/", body=html.encode(), encoding="utf-8")
+    resp.meta["source_id"] = sid
+    resp.meta["depth"] = 0
+    resp.meta["source_active"] = True
+
+    out = list(spider.parse_page(resp))
+    items = [x for x in out if isinstance(x, ArticleItem)]
+    reqs = [x for x in out if isinstance(x, Request)]
+
+    assert len(items) == 1
+    assert spider._attempted[sid] == 1
+    assert spider._reserved[sid] == 2
+    assert len(reqs) == 1
+
+    child_url = reqs[0].url
+    child_html = "<html><body><a href=\"https://example.com/z\">z</a></body></html>"
+    resp2 = HtmlResponse(url=child_url, body=child_html.encode(), encoding="utf-8")
+    resp2.meta["source_id"] = sid
+    resp2.meta["depth"] = 1
+    resp2.meta["source_active"] = True
+
+    out2 = list(spider.parse_page(resp2))
+    items2 = [x for x in out2 if isinstance(x, ArticleItem)]
+    reqs2 = [x for x in out2 if isinstance(x, Request)]
+
+    assert len(items2) == 1
+    assert spider._attempted[sid] == 2
+    assert spider._reserved[sid] == 2
+    assert len(reqs2) == 0
+
+
+def test_html_article_spider_max_one_schedules_homepage_only() -> None:
+    sid = "one_com"
+    row = {"source_id": sid, "_homepage_url": "https://example.org/", "_source_active": True}
+    spider = HtmlArticleSpider(sources=[row], max_articles_per_source=1, max_depth=2, summary=None)
+    assert len(list(spider.start_requests())) == 1
+    assert spider._reserved[sid] == 1
+
+    html = "<html><body><a href=\"https://example.org/a\">a</a><a href=\"https://example.org/b\">b</a></body></html>"
+    resp = HtmlResponse(url="https://example.org/", body=html.encode(), encoding="utf-8")
+    resp.meta.update({"source_id": sid, "depth": 0, "source_active": True})
+    out = list(spider.parse_page(resp))
+    assert len([x for x in out if isinstance(x, Request)]) == 0
+    assert spider._reserved[sid] == 1
