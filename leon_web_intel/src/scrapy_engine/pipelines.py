@@ -87,6 +87,7 @@ class WebIntelArticlePipeline:
         error_type: str,
         error_message: str,
         stage: str = "scrapy_pipeline",
+        frontier_status: str = "failed",
     ) -> None:
         if not self.db:
             return
@@ -102,6 +103,19 @@ class WebIntelArticlePipeline:
                     "created_at": utc_now(),
                 }
             )
+            if url:
+                if frontier_status == "skipped":
+                    self.db.mark_frontier_skipped(
+                        url=url,
+                        reason_type=error_type,
+                        reason_message=error_message,
+                    )
+                else:
+                    self.db.mark_frontier_failed(
+                        url=url,
+                        error_type=error_type,
+                        error_message=error_message,
+                    )
             self._bump_errors()
         except Exception as exc:  # noqa: BLE001
             logger.exception("crawl_errors insert failed: %s", exc)
@@ -117,6 +131,14 @@ class WebIntelArticlePipeline:
         source_active = bool(adapter.get("source_active", True))
         err_type = adapter.get("error_type")
         err_msg = adapter.get("error_message")
+
+        if url:
+            self.db.upsert_frontier_url(
+                source_id=source_id,
+                url=url,
+                strategy=strategy,
+                status="crawling",
+            )
 
         status = adapter.get("response_status")
         if status is not None and int(status) >= 400:
@@ -136,6 +158,7 @@ class WebIntelArticlePipeline:
                 error_type=str(err_type),
                 error_message=str(err_msg or ""),
                 stage="scrapy_fetch",
+                frontier_status="skipped" if str(err_type) == "NonHtmlSkipped" else "failed",
             )
             adapter.pop("html_body", None)
             return item
@@ -170,6 +193,7 @@ class WebIntelArticlePipeline:
                 url=url,
                 error_type="AccessControlDetected",
                 error_message=f"paywall={paywall} login={login} captcha={captcha}",
+                frontier_status="skipped",
             )
             adapter.pop("html_body", None)
             return item
@@ -197,6 +221,11 @@ class WebIntelArticlePipeline:
 
         if content_hash and content_hash in self.seen_hashes:
             self._bump_duplicates()
+            self.db.mark_frontier_skipped(
+                url=url,
+                reason_type="DuplicateContent",
+                reason_message="content_hash already exists",
+            )
             adapter.pop("html_body", None)
             return item
 
@@ -232,6 +261,7 @@ class WebIntelArticlePipeline:
 
         try:
             self.db.insert_article(row)
+            self.db.mark_frontier_crawled(url=url, content_hash=content_hash)
             self.seen_hashes.add(content_hash)
             self._bump_articles()
         except Exception as exc:  # noqa: BLE001

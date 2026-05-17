@@ -36,6 +36,7 @@ def main() -> None:
         default=ROOT / "data" / "db" / "web_intel.duckdb",
         help="Path to DuckDB written by run_profile.py",
     )
+    p.add_argument("--run-id", default=None, help="Optional crawl_runs.run_id from run_pipeline.py")
     args = p.parse_args()
 
     summary = run_scrapy_engine(
@@ -44,6 +45,7 @@ def main() -> None:
         limit=args.limit,
         max_articles_per_source=args.max_articles_per_source,
         db_path=args.db,
+        run_id=args.run_id,
     )
 
     print("")
@@ -54,6 +56,8 @@ def main() -> None:
     print(f"Articles inserted: {summary.articles_inserted}")
     print(f"Crawl errors logged: {summary.errors_logged}")
     print(f"Duplicate content hashes skipped: {summary.duplicates_skipped}")
+    if args.run_id:
+        print(f"Run ID: {args.run_id}")
     print(f"Database: {args.db.resolve()}")
     print("")
 

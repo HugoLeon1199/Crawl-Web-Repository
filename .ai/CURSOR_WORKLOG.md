@@ -3,6 +3,100 @@
 **Repo:** https://github.com/HugoLeon1199/Crawl-Web-Repository  
 **Project:** Leon Global Web Intelligence Engine  
 
+## Current session (2026-05-17) - E2E Crawl Foundation: runs, frontier, health, exports, report
+
+### Current task
+
+Leon: build a production-ready crawl foundation that can run small with `--limit` but has durable schema/pipeline foundations for larger later runs:
+
+`sources_raw.txt -> profile -> crawl frontier -> Scrapy crawl -> articles/errors/source health -> exports -> final report`
+
+### Files created
+
+- `leon_web_intel/run_export.py` - exports articles/errors/discovered/frontier/source health plus final report.
+- `leon_web_intel/run_pipeline.py` - subprocess orchestrator for profile, Scrapy, export; creates/finishes `crawl_runs`.
+- `leon_web_intel/src/reporting/crawl_report.py` - `write_final_crawl_report(db, out_path)`.
+- `leon_web_intel/tests/test_crawl_foundation.py` - offline tests for crawl runs, frontier, source health, exports, report, command building.
+
+### Files modified
+
+- `leon_web_intel/src/storage/db.py` - added tables `crawl_runs`, `crawl_frontier`, `source_health`; idempotent migration helper; crawl run helpers; frontier state helpers; source health recompute; article/error/discovered/frontier/health exports; crawl summary stats.
+- `leon_web_intel/src/scrapy_engine/pipelines.py` - upsert frontier on item processing; mark successful article as `crawled`; mark fetch/extract errors as `failed`; mark duplicate/access-control/non-HTML skips as `skipped` where appropriate.
+- `leon_web_intel/run_scrapy.py` - optional `--run-id`.
+- `leon_web_intel/src/scrapy_engine/runner.py` - accepts optional `run_id` without coupling Scrapy internals to orchestration.
+- `leon_web_intel/tests/conftest.py` - add repo root to `sys.path` so CLI helpers can be imported.
+- `.github/workflows/leon_web_intel_ci.yml` - CI now runs `python -m pytest -v --tb=short`, profile dry-run, and `python run_export.py`; no network crawl.
+- `leon_web_intel/README.md` - added "Production-ready E2E Crawl Foundation" flow, outputs, and scale/safety notes.
+- `.ai/CURSOR_WORKLOG.md` - this entry.
+
+### Schema added
+
+- `crawl_runs`: run audit with input/config/status/totals/notes.
+- `crawl_frontier`: URL state for pending/crawling/crawled/failed/skipped, retry count, last error, crawl timestamps, content hash.
+- `source_health`: per-source URLs seen, inserted articles, errors, last success/error, success rate.
+
+### Commands run
+
+Interpreter used:
+
+`D:\cursor\LEONCODE\CRAWL WEB\.tools\nuget_packages\python.3.11.9\tools\python.exe`
+
+| Command | Result |
+|---------|--------|
+| `python -m pip install -r requirements.txt` | OK; requirements already satisfied |
+| `python -m pytest -v --tb=short` | OK: 28 passed |
+| `python run_profile.py --input config/sources_raw.txt --dry-run` | OK: 200 valid URLs, 198 unique sources |
+| `python run_export.py` | OK: all export files written |
+| `python run_pipeline.py --input config/sources_raw.txt --limit 10 --max-articles-per-source 2 --strategy all --force-refresh` | Timed out in Cursor shell after ~304s; subprocesses stopped; `crawl_runs` marked `failed` with timeout note |
+| `python run_export.py` after timeout cleanup | OK: regenerated exports/report with failed run audit |
+
+### Export files generated
+
+- `leon_web_intel/data/exports/articles.csv`
+- `leon_web_intel/data/exports/articles.parquet`
+- `leon_web_intel/data/exports/crawl_errors.csv`
+- `leon_web_intel/data/exports/discovered_urls.csv`
+- `leon_web_intel/data/exports/crawl_frontier.csv`
+- `leon_web_intel/data/exports/source_health.csv`
+- `leon_web_intel/data/exports/final_crawl_report.md`
+
+Final report after timeout cleanup recorded:
+
+- latest run: `52cb53b0-b817-447f-8a0f-633a6359713f`, status `failed`
+- sources: 10
+- articles: 3
+- errors: 13
+- frontier crawled: 3
+- frontier skipped: 13
+
+### Failure / cleanup notes
+
+`run_pipeline.py` timed out at the shell layer after ~5 minutes. The DB was locked by child Python processes:
+
+- `run_pipeline.py --input config/sources_raw.txt --limit 10 ...`
+- `run_scrapy.py --strategy all --limit 10 ... --run-id 52cb53b0-b817-447f-8a0f-633a6359713f`
+- an older leftover `run_scrapy.py --strategy all --limit 5 --max-articles-per-source 2`
+
+Stopped only Python processes whose command line matched `run_pipeline.py` or `run_scrapy.py`, then marked any `crawl_runs.status = 'running'` as `failed` with note:
+
+`local agent timeout during run_pipeline smoke; subprocess stopped`
+
+### Known limitations
+
+- Local DuckDB only; no distributed scheduler.
+- Scrapy crawl remains bounded by `--limit`, per-source caps, and CloseSpider timeout.
+- No Redis/Celery/Airflow/dashboard/AI summary.
+- No proxy rotation, stealth browser, CAPTCHA bypass, login automation, or paywall bypass.
+- `run_pipeline.py` is architecturally wired, but full network E2E did not complete in this Cursor Windows agent within the timeout.
+
+### Needs ChatGPT/Gemini review
+
+- Review whether `ShortContent` should remain `failed` or be classified as `skipped` for frontier audit.
+- Review future retry policy for `crawl_frontier.next_crawl_at` once a real scheduler is added.
+- Review whether discovered RSS/sitemap URLs should be inserted into `discovered_urls` directly from Scrapy spiders in a later phase, beyond the current pipeline-level frontier integration.
+
+---
+
 Single shared AI workflow file — Leon, ChatGPT, Gemini ↔ Cursor.
 
 ---

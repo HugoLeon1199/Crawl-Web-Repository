@@ -75,6 +75,46 @@ Scrapy respects **`ROBOTSTXT_OBEY = True`**, uses **User-Agent / timeout / retri
 
 Skipped in this phase (sources are not loaded for Scrapy): `api_first`, `metadata_only`, `manual_review`, `playwright_fallback`. HTML lane skips sources with `robots_can_fetch_homepage = false`.
 
+## Production-ready E2E Crawl Foundation
+
+This phase wires the durable crawl foundation end to end:
+
+```bash
+python run_pipeline.py --input config/sources_raw.txt --limit 20 --max-articles-per-source 3 --strategy all --force-refresh
+```
+
+Flow:
+
+1. `sources_raw.txt` -> `run_profile.py --profile-only`
+2. persisted source profiles -> Scrapy crawl lanes
+3. article attempts -> `crawl_frontier`
+4. successful extracts -> `articles`
+5. failures/skips -> `crawl_errors` plus frontier state
+6. current DB -> `source_health`
+7. exports -> final Markdown report
+
+`--limit` and `--max-articles-per-source` are for small, bounded test runs. The schema and pipeline are designed so a larger run later can increase limits/config without replacing the core architecture.
+
+Outputs:
+
+| Artifact | Path |
+|----------|------|
+| Articles CSV | `data/exports/articles.csv` |
+| Articles Parquet | `data/exports/articles.parquet` |
+| Crawl errors CSV | `data/exports/crawl_errors.csv` |
+| Discovered URLs CSV | `data/exports/discovered_urls.csv` |
+| Crawl frontier CSV | `data/exports/crawl_frontier.csv` |
+| Source health CSV | `data/exports/source_health.csv` |
+| Final crawl report | `data/exports/final_crawl_report.md` |
+
+The foundation includes `crawl_runs`, `crawl_frontier`, and `source_health` tables for incremental crawl state, retry accounting, audit history, and source-level health. It intentionally does not add distributed crawling, Redis, Airflow, dashboards, AI summaries, proxy rotation, stealth browsing, login automation, CAPTCHA bypass, or paywall bypass.
+
+You can regenerate exports without crawling:
+
+```bash
+python run_export.py
+```
+
 ## Sample crawl (light touch)
 
 Runs profiling first (respects resume), then fetches a **few URLs per source** according to `best_strategy`:

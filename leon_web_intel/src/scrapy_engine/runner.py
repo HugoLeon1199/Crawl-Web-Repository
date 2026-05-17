@@ -44,8 +44,10 @@ def run_scrapy_engine(
     limit: int,
     max_articles_per_source: int,
     db_path: Path | None = None,
+    run_id: str | None = None,
 ) -> ScrapyRunSummary:
     """Execute Scrapy lane(s). Uses CrawlerProcess for reliable teardown (esp. Windows)."""
+    _ = run_id  # Stored at the orchestration layer for this phase.
     rules_path = root / "config" / "crawl_rules.yaml"
     rules = load_crawl_rules(rules_path)
     db = db_path or (root / "data" / "db" / "web_intel.duckdb")

@@ -35,13 +35,16 @@ jobs:
       - name: Prepare CI result files folder
         run: mkdir -p ci-results
 
-      - name: Profile dry-run (no HTTP)
-        run: python run_profile.py --input config/sources_raw.txt --dry-run 2>&1 | tee ci-results/dry_run.txt
-
       - name: Pytest
         run: python -m pytest -v --tb=short --junitxml=ci-results/pytest-junit.xml
 
-      - name: Upload result files (JUnit + dry-run log)
+      - name: Profile dry-run (no HTTP)
+        run: python run_profile.py --input config/sources_raw.txt --dry-run 2>&1 | tee ci-results/dry_run.txt
+
+      - name: Export empty/local DB artifacts (no network crawl)
+        run: python run_export.py 2>&1 | tee ci-results/run_export.txt
+
+      - name: Upload result files (JUnit + smoke logs)
         if: always()
         uses: actions/upload-artifact@v4
         with:
