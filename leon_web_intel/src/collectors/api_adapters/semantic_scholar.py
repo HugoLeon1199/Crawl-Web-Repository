@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from loguru import logger
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord, http_get_with_retry
 from settings import CrawlRules
@@ -77,8 +78,10 @@ class SemanticScholarAdapter(ApiAdapter):
         }
         r = http_get_with_retry(client, url, params=params)
         if r.status_code == 429:
+            logger.warning("Semantic Scholar search rate limited (429); skipping adapter batch")
             return []
         if r.status_code >= 400:
+            logger.warning("Semantic Scholar search HTTP {} — empty batch", r.status_code)
             return []
         data = r.json()
         rows = parse_semantic_scholar_search(data)

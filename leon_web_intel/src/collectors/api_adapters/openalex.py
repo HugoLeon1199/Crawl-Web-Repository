@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
+from loguru import logger
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord, http_get_with_retry
 from settings import CrawlRules
@@ -94,6 +96,7 @@ class OpenAlexAdapter(ApiAdapter):
             params: dict[str, Any] = {"filter": flt, "per-page": page_size, "cursor": cursor}
             r = http_get_with_retry(client, url, params=params)
             if r.status_code >= 400:
+                logger.warning("OpenAlex primary query HTTP {}", r.status_code)
                 break
             data = r.json()
             batch = parse_openalex_works_response(data)
@@ -104,4 +107,45 @@ class OpenAlexAdapter(ApiAdapter):
                 cursor = meta.get("next_cursor")
             if not batch:
                 break
+
+        if not out and (not query or str(query).strip() in ("*", "")):
+            try:
+                d0 = date.fromisoformat(day)
+            except ValueError:
+                pass
+            else:
+                day_next = (d0 + timedelta(days=1)).isoformat()
+                flt_fb = f"from_updated_date:{day},to_updated_date:{day_next}"
+                logger.info(
+                    "OpenAlex: no rows for publication_date={}, fetching works updated in [{} .. {})",
+                    day,
+                    day,
+                    day_next,
+                )
+                cursor = "*"
+                fb_cap = 50 if cap is None else min(50, cap)
+                pages_fb = 0
+                while cursor and len(out) < fb_cap and pages_fb < 15:
+                    pages_fb += 1
+                    page_size = min(25, max(1, fb_cap - len(out)))
+                    params_fb: dict[str, Any] = {"filter": flt_fb, "per-page": page_size, "cursor": cursor}
+                    r2 = http_get_with_retry(client, url, params=params_fb)
+                    if r2.status_code >= 400:
+                        logger.warning("OpenAlex fallback HTTP {}", r2.status_code)
+                        break
+                    data2 = r2.json()
+                    batch2 = parse_openalex_works_response(data2)
+                    for rec in batch2:
+                        rec.raw_metadata = {
+                            **rec.raw_metadata,
+                            "openalex_collect_mode": "updated_date_fallback",
+                        }
+                    out.extend(batch2)
+                    meta2 = data2.get("meta") if isinstance(data2, dict) else None
+                    cursor = None
+                    if isinstance(meta2, dict):
+                        cursor = meta2.get("next_cursor")
+                    if not batch2:
+                        break
+
         return out if cap is None else out[:cap]

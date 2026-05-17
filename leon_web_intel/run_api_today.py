@@ -147,6 +147,9 @@ def run_api_hub(
                 raise
             continue
 
+        if not records:
+            logger.info("API hub adapter {!r} returned 0 records", name)
+
         for rec in records:
             dk = intel_dedupe_key(rec.url)
             if dk in seen_keys:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Iterator
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -49,20 +50,38 @@ def fetch_artlist_window(
         "startdatetime": _fmt_gdelt_ts(window_start_utc),
         "enddatetime": _fmt_gdelt_ts(window_end_utc),
     }
-    r = client.get(GDELT_DOC_API, params=params, timeout=90.0)
-    r.raise_for_status()
-    text = r.text.strip()
-    if not text:
-        return []
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        logger.warning("GDELT non-JSON response ({} chars)", len(text))
-        return []
-    arts = data.get("articles")
-    if not isinstance(arts, list):
-        return []
-    return [a for a in arts if isinstance(a, dict)]
+    last: httpx.Response | None = None
+    for attempt in range(5):
+        r = client.get(GDELT_DOC_API, params=params, timeout=90.0)
+        last = r
+        if r.status_code in (429, 503):
+            sleep_s = min(45.0, 1.25 * (2**attempt))
+            logger.warning(
+                "GDELT ArtList {} HTTP {} — retry in {:.1f}s (attempt {}/{})",
+                params.get("startdatetime"),
+                r.status_code,
+                sleep_s,
+                attempt + 1,
+                5,
+            )
+            time.sleep(sleep_s)
+            continue
+        r.raise_for_status()
+        text = r.text.strip()
+        if not text:
+            return []
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError:
+            logger.warning("GDELT non-JSON response ({} chars)", len(text))
+            return []
+        arts = data.get("articles")
+        if not isinstance(arts, list):
+            return []
+        return [a for a in arts if isinstance(a, dict)]
+    if last is not None:
+        last.raise_for_status()
+    return []
 
 
 def _bisect_window(

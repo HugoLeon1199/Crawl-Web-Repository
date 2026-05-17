@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from loguru import logger
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord, http_get_with_retry
 from settings import CrawlRules
@@ -71,7 +72,11 @@ class GitHubApiAdapter(ApiAdapter):
         params = {"q": q, "per_page": per, "sort": "updated"}
         r = http_get_with_retry(client, url, params=params)
         if r.status_code == 403:
+            logger.warning(
+                "GitHub search HTTP 403 (rate limit or abuse?) — set GITHUB_TOKEN or retry later; empty batch"
+            )
             return []
         if r.status_code >= 400:
+            logger.warning("GitHub search HTTP {} — empty batch", r.status_code)
             return []
         return parse_github_search_repositories(r.json())
