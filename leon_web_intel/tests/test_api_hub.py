@@ -219,7 +219,7 @@ def test_api_runner_continue_on_error(tmp_path: Path) -> None:
             db=db,
             rules=rules,
             adapters=[Boom(), Ok()],
-            target_date_str="2020-01-15",
+            target_date_str="today",
             timezone_name="UTC",
             query="*",
             max_records=10,
@@ -229,7 +229,7 @@ def test_api_runner_continue_on_error(tmp_path: Path) -> None:
             raw_store=raw_store,
             client=client,
         )
-        rows = db.fetch_today_api_records(target_date_str="2020-01-15", timezone_name="UTC")
+        rows = db.fetch_today_api_records(target_date_str="today", timezone_name="UTC")
         assert len(rows) == 1
         assert rows[0]["api_name"] == "ok"
     finally:

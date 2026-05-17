@@ -13,14 +13,14 @@
 
 ## Totals
 - Sources: 16
-- Discovered URLs: 0
+- Discovered URLs: 15
 - Frontier pending: 0
 - Frontier crawling: 0
 - Frontier crawled: 24
 - Frontier failed: 7
 - Frontier skipped: 43
 - Articles: 24
-- Errors: 122
+- Errors: 123
 
 ## Articles By Strategy
 - rss_then_article_extract: 22
@@ -29,6 +29,7 @@
 ## Errors By Type
 - AccessControlDetected: 115
 - ShortContent: 7
+- ApiHubError: 1
 
 ## Top Sources By Articles
 - aljazeera_com: 15
@@ -44,6 +45,7 @@
 - dw_com: 2
 - reutersagency_com: 2
 - un_org: 2
+- None: 1
 
 ## Quality And Content
 - Average quality_score: 9.6667

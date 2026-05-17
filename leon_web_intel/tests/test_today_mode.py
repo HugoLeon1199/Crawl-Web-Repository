@@ -84,7 +84,7 @@ def test_today_report_empty_db(tmp_path: Path) -> None:
     finally:
         db.close()
     text = report.read_text(encoding="utf-8")
-    assert "Today Crawl Report" in text
+    assert "Today Final Report" in text
     assert "Europe/Amsterdam" in text
 
 
