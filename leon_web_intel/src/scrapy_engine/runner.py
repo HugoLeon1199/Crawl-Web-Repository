@@ -1,0 +1,98 @@
+"""Run Scrapy crawlers after SourceProfiler (DuckDB-backed source selection)."""
+
+from __future__ import annotations
+
+import threading
+from pathlib import Path
+from typing import Literal
+
+from scrapy.crawler import CrawlerRunner
+from scrapy.utils.log import configure_logging
+from twisted.internet import defer, reactor
+
+from scrapy_engine.db_source_loader import load_sources_for_scrapy
+from scrapy_engine.settings import build_scrapy_settings
+from scrapy_engine.spiders.html_article_spider import HtmlArticleSpider
+from scrapy_engine.spiders.rss_article_spider import RssArticleSpider
+from scrapy_engine.spiders.sitemap_article_spider import SitemapArticleSpider
+from settings import load_crawl_rules
+
+
+class ScrapyRunSummary:
+    """Thread-safe counters shared with spiders + pipeline."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.sources_loaded = 0
+        self.requests_scheduled = 0
+        self.articles_inserted = 0
+        self.errors_logged = 0
+        self.duplicates_skipped = 0
+        self.pipeline_items = 0
+
+
+def run_scrapy_engine(
+    *,
+    root: Path,
+    strategy: Literal["rss", "sitemap", "html", "all"],
+    limit: int,
+    max_articles_per_source: int,
+    db_path: Path | None = None,
+) -> ScrapyRunSummary:
+    """Execute Scrapy lane(s). Blocks until the Twisted reactor stops."""
+    rules_path = root / "config" / "crawl_rules.yaml"
+    rules = load_crawl_rules(rules_path)
+    db = db_path or (root / "data" / "db" / "web_intel.duckdb")
+    (root / "data" / "db").mkdir(parents=True, exist_ok=True)
+    raw_root = root / "data" / "raw"
+    raw_root.mkdir(parents=True, exist_ok=True)
+
+    buckets = load_sources_for_scrapy(db, strategy, limit)
+    summary = ScrapyRunSummary()
+    summary.sources_loaded = len(buckets["rss"]) + len(buckets["sitemap"]) + len(buckets["html"])
+
+    if summary.sources_loaded == 0:
+        return summary
+
+    settings = build_scrapy_settings(
+        rules,
+        db_path=db,
+        crawl_rules_path=rules_path,
+        raw_root=raw_root,
+        summary=summary,
+    )
+
+    configure_logging(settings={"LOG_LEVEL": settings.get("LOG_LEVEL")})
+    runner = CrawlerRunner(settings)
+
+    @defer.inlineCallbacks
+    def _sequential() -> object:
+        try:
+            if buckets["rss"]:
+                yield runner.crawl(
+                    RssArticleSpider,
+                    sources=buckets["rss"],
+                    max_articles_per_source=max_articles_per_source,
+                    summary=summary,
+                )
+            if buckets["sitemap"]:
+                yield runner.crawl(
+                    SitemapArticleSpider,
+                    sources=buckets["sitemap"],
+                    max_articles_per_source=max_articles_per_source,
+                    summary=summary,
+                )
+            if buckets["html"]:
+                yield runner.crawl(
+                    HtmlArticleSpider,
+                    sources=buckets["html"],
+                    max_articles_per_source=max_articles_per_source,
+                    summary=summary,
+                )
+        finally:
+            reactor.stop()
+
+    d = _sequential()
+    d.addErrback(lambda _f: reactor.stop())
+    reactor.run(installSignalHandlers=False)
+    return summary

@@ -48,6 +48,33 @@ Options:
 - `--cache-days 7` — resume window  
 - `--no-export-csv` / `--no-export-parquet` — disable exports  
 
+## Scrapy production crawl layer (Phase 3 scaffold)
+
+After profiles exist in DuckDB, the **Scrapy** layer performs a bounded production-style crawl. It does **not** replace SourceProfiler and is **not** a peer strategy to RSS/API/HTML detection—it only **executes** rows whose `best_strategy` is already `rss_then_article_extract`, `sitemap_then_article_extract`, or `html_then_trafilatura`.
+
+**Standard flow**
+
+1. Profile / refresh strategies (universal profiler + sample v1):
+
+```bash
+python run_profile.py --input config/sources_raw.txt --profile-only --limit 10 --force-refresh
+```
+
+2. Run Scrapy lanes (reads `data/db/web_intel.duckdb`, obeys robots.txt, same governance keywords as v1):
+
+```bash
+python run_scrapy.py --strategy all --limit 10 --max-articles-per-source 3
+```
+
+Lanes:
+
+- `run_profile.py` — SourceProfiler + optional **sample** crawl (httpx/trafilatura).  
+- `run_scrapy.py` — **Scrapy** crawl engine: RSS → article URLs, sitemap → article URLs, or shallow HTML link crawl from homepage.
+
+Scrapy respects **`ROBOTSTXT_OBEY = True`**, uses **User-Agent / timeout / retries / delay** from `config/crawl_rules.yaml`, keeps **low per-domain concurrency**, and does **not** bypass paywall, login, or CAPTCHA (keyword gates match v1; blocked pages log `AccessControlDetected` without persisting full article content).
+
+Skipped in this phase (sources are not loaded for Scrapy): `api_first`, `metadata_only`, `manual_review`, `playwright_fallback`. HTML lane skips sources with `robots_can_fetch_homepage = false`.
+
 ## Sample crawl (light touch)
 
 Runs profiling first (respects resume), then fetches a **few URLs per source** according to `best_strategy`:
@@ -109,6 +136,7 @@ python -m pytest
 
 ## Next steps (beyond v1)
 
+- Expand Scrapy integration (per-URL robots, richer scheduling, metrics) without coupling spiders to profiler internals  
 - Real per-adapter API collectors (GDELT, OpenAlex, SEC EDGAR, …)  
 - Stronger article URL ranking from sitemaps  
 - robots.txt enforcement in collectors  
