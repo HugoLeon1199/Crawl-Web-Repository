@@ -14,7 +14,6 @@ from collectors.api_adapters.semantic_scholar import SemanticScholarAdapter
 from collectors.api_adapters.world_bank import WorldBankAdapter
 
 _ADAPTER_ORDER: list[tuple[str, type[ApiAdapter]]] = [
-    ("gdelt", GdeltAdapter),
     ("openalex", OpenAlexAdapter),
     ("arxiv", ArxivAdapter),
     ("sec", SecEdgarAdapter),
@@ -23,6 +22,7 @@ _ADAPTER_ORDER: list[tuple[str, type[ApiAdapter]]] = [
     ("github", GitHubApiAdapter),
     ("crossref", CrossrefAdapter),
     ("semantic_scholar", SemanticScholarAdapter),
+    ("gdelt", GdeltAdapter),
 ]
 
 _NAME_TO_CLASS: dict[str, type[ApiAdapter]] = dict(_ADAPTER_ORDER)

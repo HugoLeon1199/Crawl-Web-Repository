@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -16,7 +17,7 @@ from collectors.gdelt_collector import iter_gdelt_artlist_day, url_to_gdelt_sour
 from extraction.article_extractor import compute_quality_score, extract_article  # noqa: E402
 from loguru import logger  # noqa: E402
 from reporting.gdelt_report import write_today_gdelt_report  # noqa: E402
-from settings import load_crawl_rules  # noqa: E402
+from settings import build_api_user_agent, load_crawl_rules  # noqa: E402
 from storage.db import WebIntelDB, new_id, utc_now  # noqa: E402
 from storage.raw_store import RawStore  # noqa: E402
 from utils.logging_config import configure_logging  # noqa: E402
@@ -34,7 +35,24 @@ def main(argv: list[str] | None = None) -> int:
         default=0,
         help="Cap unique URLs (0 = no cap; API still max 250 per request)",
     )
-    parser.add_argument("--extract-content", action="store_true", help="Fetch URL + trafilatura → articles table")
+    parser.add_argument(
+        "--tile-hours",
+        type=float,
+        default=1.0,
+        metavar="H",
+        help="UTC tile width for ArtList walks (default 1). Larger = fewer tiles but more bisection/truncation risk when a tile hits 250 rows.",
+    )
+    parser.add_argument(
+        "--tile-sleep",
+        type=float,
+        default=5.0,
+        metavar="SEC",
+        help="Pause between tiles (429/backoff friendly). Use 0–1 for faster runs if the API tolerates it.",
+    )
+    parser.set_defaults(extract_content=True)
+    gx = parser.add_mutually_exclusive_group()
+    gx.add_argument("--extract-content", action="store_true", dest="extract_content")
+    gx.add_argument("--no-extract-content", action="store_false", dest="extract_content")
     parser.add_argument(
         "--clear-day",
         action="store_true",
@@ -43,6 +61,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--no-clear-day", action="store_false", dest="clear_day")
     args = parser.parse_args(argv)
+    if args.tile_hours <= 0:
+        parser.error("--tile-hours must be positive")
+    if args.tile_sleep < 0:
+        parser.error("--tile-sleep must be >= 0")
 
     exports = ROOT / "data" / "exports"
     exports.mkdir(parents=True, exist_ok=True)
@@ -50,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     configure_logging(log_path)
 
     rules = load_crawl_rules(ROOT / "config" / "crawl_rules.yaml")
+    ua = build_api_user_agent(rules)
     target_cal = str(resolve_calendar_date(args.date, args.timezone))
     start_utc, end_utc = target_date_range(args.date, args.timezone)
     cap = None if args.max_records <= 0 else args.max_records
@@ -72,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         import httpx
 
         extract_client = httpx.Client(
-            headers={"User-Agent": rules.user_agent},
+            headers={"User-Agent": ua},
             follow_redirects=True,
             timeout=float(rules.request_timeout_seconds),
         )
@@ -83,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
             window_end_utc=end_utc,
             max_records_total=cap,
             http_timeout=float(rules.request_timeout_seconds) + 30.0,
+            user_agent=ua,
+            tile_step=timedelta(hours=float(args.tile_hours)),
+            tile_sleep_seconds=float(args.tile_sleep),
         ):
             url = str(art.get("url") or "").strip()
             if not url.startswith("http"):

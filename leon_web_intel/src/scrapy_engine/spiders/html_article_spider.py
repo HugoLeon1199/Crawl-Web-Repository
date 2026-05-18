@@ -5,6 +5,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import scrapy
+from scrapy.http.response.text import TextResponse
 
 from scrapy_engine.items import ArticleItem
 from utils.today_filter import is_url_likely_today, resolve_calendar_date
@@ -121,6 +122,9 @@ class HtmlArticleSpider(scrapy.Spider):
             return
 
         if depth >= self.max_depth:
+            return
+
+        if not isinstance(response, TextResponse):
             return
 
         links = response.css("a::attr(href)").getall()[: self.max_links_per_page]

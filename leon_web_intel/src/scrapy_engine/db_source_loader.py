@@ -14,13 +14,13 @@ ALLOWED_STRATEGIES = {
     "rss_then_article_extract",
     "sitemap_then_article_extract",
     "html_then_trafilatura",
+    "playwright_fallback",
 }
 
 SKIP_STRATEGIES = {
     "api_first",
     "metadata_only",
     "manual_review",
-    "playwright_fallback",
 }
 
 
@@ -110,6 +110,13 @@ def load_sources_for_scrapy(
             if not _robots_allows_html(row):
                 continue
             if norm["_homepage_url"]:
+                html_out.append(norm)
+        elif strat == "playwright_fallback":
+            if norm["_rss_urls"]:
+                rss_out.append(norm)
+            elif norm["_sitemap_urls"]:
+                sitemap_out.append(norm)
+            elif norm["_homepage_url"] and _robots_allows_html(row):
                 html_out.append(norm)
 
     def clip(xs: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -129,15 +129,24 @@ class CachedHttpClient:
             body=resp.content,
             cached_at=time.time(),
         )
-        self.cache.set(url, entry)
         return entry
 
     def get(self, url: str) -> CacheEntry:
+        """Return cached entry or fetch. Network + retries run outside the mutex so
+        profiler/scraper threads are not serialized on unrelated URLs."""
         with self._lock:
             cached = self.cache.get(url)
             if cached:
                 return cached
-            return self._fetch_uncached(url)
+
+        entry = self._fetch_uncached(url)
+
+        with self._lock:
+            cached = self.cache.get(url)
+            if cached:
+                return cached
+            self.cache.set(url, entry)
+        return entry
 
     def get_text(self, url: str, encoding: str = "utf-8") -> tuple[int, str]:
         entry = self.get(url)

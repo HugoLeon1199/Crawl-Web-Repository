@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord, http_get_with_retry
-from settings import CrawlRules
+from settings import CrawlRules, merge_polite_mailto_param
 from utils.today_filter import resolve_calendar_date
 
 
@@ -90,6 +90,7 @@ class CrossrefAdapter(ApiAdapter):
             }
             if query and query not in ("*", ""):
                 params["query.title"] = query
+            params = merge_polite_mailto_param(rules, params)
             r = http_get_with_retry(client, url, params=params)
             if r.status_code >= 400:
                 break

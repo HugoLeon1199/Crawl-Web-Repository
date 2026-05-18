@@ -29,7 +29,7 @@ def build_scrapy_settings_dict(
         "TWISTED_REACTOR": "twisted.internet.asyncioreactor.AsyncioSelectorReactor",
         "USER_AGENT": rules.user_agent,
         "DOWNLOAD_TIMEOUT": int(rules.request_timeout_seconds),
-        "RETRY_TIMES": max(0, min(2, int(rules.max_retries))),
+        "RETRY_TIMES": max(0, min(8, int(rules.max_retries))),
         "DOWNLOAD_DELAY": float(rules.default_delay_seconds),
         "CONCURRENT_REQUESTS_PER_DOMAIN": max(1, int(rules.scrapy_concurrent_requests_per_domain)),
         "CONCURRENT_REQUESTS": max(8, int(rules.scrapy_concurrent_requests)),

@@ -203,7 +203,13 @@ class WebIntelArticlePipeline:
             content_length=content_length,
             min_article_content_length=min_len,
         )
-        if paywall or login or captcha:
+        access_relaxed_keep = (
+            self.rules.keep_extract_despite_access_signal_if_meets_min_length
+            and not captcha
+            and content_length >= min_len
+            and (paywall or login)
+        )
+        if (paywall or login or captcha) and not access_relaxed_keep:
             self._log_error(
                 source_id=source_id,
                 url=url,
@@ -282,15 +288,16 @@ class WebIntelArticlePipeline:
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("warning insert failed: %s", exc)
             else:
-                self._log_error(
-                    source_id=source_id,
-                    url=url,
-                    error_type="NotToday",
-                    error_message="no trustworthy today signal (date/path)",
-                    frontier_status="skipped",
-                )
-                adapter.pop("html_body", None)
-                return item
+                if not self.rules.today_allow_undated_uncertain_urls:
+                    self._log_error(
+                        source_id=source_id,
+                        url=url,
+                        error_type="NotToday",
+                        error_message="no trustworthy today signal (date/path)",
+                        frontier_status="skipped",
+                    )
+                    adapter.pop("html_body", None)
+                    return item
 
         score = compute_quality_score(
             title=extracted.title,
@@ -302,7 +309,7 @@ class WebIntelArticlePipeline:
             strategy=strategy,
             raw_path=raw_path,
             extract_ok=True,
-            paywall_triplet=(False, False, False),
+            paywall_triplet=(paywall, login, captcha),
             existing_hashes=self.seen_hashes,
         )
 

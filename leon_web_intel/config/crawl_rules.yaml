@@ -1,21 +1,28 @@
 user_agent: "LeonWebIntelBot/0.1 (+local research project)"
-request_timeout_seconds: 20
-max_retries: 2
-default_delay_seconds: 1.5
-concurrency: 20
-scrapy_concurrent_requests: 32
-scrapy_concurrent_requests_per_domain: 3
+# Email for SEC / OpenAlex / Crossref / NCBI UA — set env WEB_INTEL_CONTACT_EMAIL or config/crawl_rules.local.yaml (gitignored)
+contact_email: null
+contact_display_name: "LeonWebIntel"
+ncbi_tool_name: "leon_web_intel"
+# --- Max-intake profile (still robots.txt, no paywall/CAPTCHA bypass) ---
+request_timeout_seconds: 35
+max_retries: 6
+default_delay_seconds: 0.85
+concurrency: 32
+scrapy_concurrent_requests: 56
+scrapy_concurrent_requests_per_domain: 10
 profile_cache_days: 7
 http_cache_enabled: true
 
-max_rss_candidates: 500
-max_sitemap_candidates: 200
-max_sitemaps_to_parse_in_profiler: 50
-max_urls_from_sitemap_in_profiler: 50000
+# Cap RSS URLs collected from homepage + paths; probes are further limited by profiler_max_rss_http_attempts.
+max_rss_candidates: 96
+profiler_max_rss_http_attempts: 40
+max_sitemap_candidates: 800
+max_sitemaps_to_parse_in_profiler: 120
+max_urls_from_sitemap_in_profiler: 200000
 
-min_extract_text_length: 300
-min_article_content_length: 300
-sample_max_articles_per_source: 5
+min_extract_text_length: 80
+min_article_content_length: 80
+sample_max_articles_per_source: 10000
 
 rss_candidate_paths:
   - /feed
@@ -36,8 +43,8 @@ sitemap_candidate_paths:
   - /sitemap.xml.gz
 
 js_detection:
-  min_text_length: 500
-  script_count_threshold: 15
+  min_text_length: 220
+  script_count_threshold: 28
   js_keywords:
     - "__NEXT_DATA__"
     - "window.__INITIAL_STATE__"
@@ -70,11 +77,8 @@ captcha_keywords:
   - verify you are human
   - recaptcha
 
-# Commercial / rights-sensitive publishers → prefer metadata-only paths when heuristic hits paywall/HTML-only strategies
-prefer_metadata_only_domains:
-  - reuters.com
-  - apnews.com
-  - ft.com
-  - wsj.com
-  - nikkei.com
-  - caixin.com
+# Empty list = always attempt full HTML extract when the spider schedules the URL (no domain downgrade).
+prefer_metadata_only_domains: []
+
+keep_extract_despite_access_signal_if_meets_min_length: true
+today_allow_undated_uncertain_urls: true

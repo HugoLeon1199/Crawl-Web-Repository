@@ -9,7 +9,7 @@ import httpx
 from loguru import logger
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord, http_get_with_retry
-from settings import CrawlRules
+from settings import CrawlRules, merge_polite_mailto_param
 from utils.today_filter import resolve_calendar_date
 
 
@@ -93,7 +93,9 @@ class OpenAlexAdapter(ApiAdapter):
         while cursor and (cap is None or len(out) < cap) and pages < 80:
             pages += 1
             page_size = 200 if cap is None else min(200, max(1, cap - len(out)))
-            params: dict[str, Any] = {"filter": flt, "per-page": page_size, "cursor": cursor}
+            params: dict[str, Any] = merge_polite_mailto_param(
+                rules, {"filter": flt, "per-page": page_size, "cursor": cursor}
+            )
             r = http_get_with_retry(client, url, params=params)
             if r.status_code >= 400:
                 logger.warning("OpenAlex primary query HTTP {}", r.status_code)
@@ -128,7 +130,9 @@ class OpenAlexAdapter(ApiAdapter):
                 while cursor and len(out) < fb_cap and pages_fb < 15:
                     pages_fb += 1
                     page_size = min(25, max(1, fb_cap - len(out)))
-                    params_fb: dict[str, Any] = {"filter": flt_fb, "per-page": page_size, "cursor": cursor}
+                    params_fb: dict[str, Any] = merge_polite_mailto_param(
+                        rules, {"filter": flt_fb, "per-page": page_size, "cursor": cursor}
+                    )
                     r2 = http_get_with_retry(client, url, params=params_fb)
                     if r2.status_code >= 400:
                         logger.warning("OpenAlex fallback HTTP {}", r2.status_code)

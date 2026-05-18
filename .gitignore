@@ -1,6 +1,9 @@
 # Local tooling (NuGet Python used by Cursor agent / optional dev)
 .tools/
 
+# Local crawl overrides (may contain contact_email)
+leon_web_intel/config/crawl_rules.local.yaml
+
 # Runtime artifacts (local profiling / crawls — do not commit)
 leon_web_intel/data/cache/
 leon_web_intel/data/raw/

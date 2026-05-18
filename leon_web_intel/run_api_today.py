@@ -22,7 +22,7 @@ from collectors.api_adapters.base import ApiAdapter, ApiRecord, authors_to_json 
 from collectors.api_adapters.registry import resolve_adapter_names  # noqa: E402
 from extraction.article_extractor import compute_quality_score, extract_article  # noqa: E402
 from reporting.api_hub_report import write_today_api_report  # noqa: E402
-from settings import load_crawl_rules  # noqa: E402
+from settings import build_api_user_agent, load_crawl_rules  # noqa: E402
 from storage.db import WebIntelDB, new_id, utc_now  # noqa: E402
 from storage.raw_store import RawStore  # noqa: E402
 from utils.hashing import sha256_text  # noqa: E402
@@ -238,8 +238,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--apis", default="all", help='"all" or comma-separated adapter keys')
     parser.add_argument("--query", default="*")
     parser.add_argument("--max-records", type=int, default=0, help="0 = no cap per adapter where supported")
-    parser.add_argument("--extract-content", action="store_true", default=False)
-    parser.add_argument("--no-extract-content", action="store_false", dest="extract_content")
+    parser.set_defaults(extract_content=True)
+    ex = parser.add_mutually_exclusive_group()
+    ex.add_argument("--extract-content", action="store_true", dest="extract_content")
+    ex.add_argument("--no-extract-content", action="store_false", dest="extract_content")
     parser.set_defaults(continue_on_error=True)
     parser.add_argument("--no-continue-on-error", action="store_false", dest="continue_on_error")
     parser.add_argument("--fail-fast", action="store_true", help="Abort on first adapter failure")
@@ -259,16 +261,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     headers = {
-        "User-Agent": rules.user_agent,
+        "User-Agent": build_api_user_agent(rules),
         "Accept": "application/json, application/xml, text/html;q=0.9,*/*;q=0.8",
     }
     tok = os.getenv("GITHUB_TOKEN")
     if tok:
         headers["Authorization"] = f"Bearer {tok}"
 
-    mailto = os.getenv("OPENALEX_CONTACT_EMAIL")
-    if mailto:
-        headers["User-Agent"] = f"{rules.user_agent} mailto:{mailto}"
+    ss_key = (os.getenv("SEMANTIC_SCHOLAR_API_KEY") or "").strip()
+    if ss_key:
+        headers["x-api-key"] = ss_key
 
     client = httpx.Client(headers=headers, follow_redirects=True, timeout=float(rules.request_timeout_seconds))
     raw_store = RawStore(ROOT / "data" / "raw")

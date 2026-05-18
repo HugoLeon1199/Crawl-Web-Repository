@@ -104,11 +104,30 @@ def test_run_today_command_building() -> None:
         close_spider_timeout=900,
         profile_concurrency=None,
         skip_profile=False,
+        wide_harvest=False,
     )
     assert "run_profile.py" in cmds[0][1]
     assert "--today-only" in cmds[1]
     assert cmds[1][cmds[1].index("--run-id") + 1] == "rid"
     assert "--today-only" in cmds[2]
+
+    cmds_w = build_today_commands(
+        python_executable="python",
+        input_path=Path("config/sources_raw.txt"),
+        profile_limit_cli=198,
+        strategy="rss",
+        force_refresh=True,
+        run_id="rid",
+        date_arg="today",
+        timezone_arg="Europe/Amsterdam",
+        max_urls_per_source_resolved=500,
+        close_spider_timeout=900,
+        profile_concurrency=None,
+        skip_profile=False,
+        wide_harvest=True,
+    )
+    assert "--today-only" not in cmds_w[1]
+    assert "--today-only" not in cmds_w[2]
 
 
 def test_resolve_calendar_date_explicit() -> None:

@@ -7,7 +7,7 @@ from typing import Any
 import httpx
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord, http_get_with_retry
-from settings import CrawlRules
+from settings import CrawlRules, resolve_contact_email
 from utils.today_filter import resolve_calendar_date
 
 
@@ -77,20 +77,29 @@ class PubMedAdapter(ApiAdapter):
         term = f"{term}{md}[PDAT]"
         unlimited = max_records is not None and max_records <= 0
         cap = 500 if unlimited else min(max_records or 100, 500)
+        es_params: dict[str, Any] = {"db": "pubmed", "retmode": "json", "retmax": cap, "term": term}
+        email = resolve_contact_email(rules)
+        if email:
+            es_params["tool"] = rules.ncbi_tool_name
+            es_params["email"] = email
         es = http_get_with_retry(
             client,
             base + "esearch.fcgi",
-            params={"db": "pubmed", "retmode": "json", "retmax": cap, "term": term},
+            params=es_params,
         )
         if es.status_code >= 400:
             return []
         ids = (es.json().get("esearchresult") or {}).get("idlist") or []
         if not ids:
             return []
+        sm_params: dict[str, Any] = {"db": "pubmed", "retmode": "json", "id": ",".join(ids)}
+        if email:
+            sm_params["tool"] = rules.ncbi_tool_name
+            sm_params["email"] = email
         sm = http_get_with_retry(
             client,
             base + "esummary.fcgi",
-            params={"db": "pubmed", "retmode": "json", "id": ",".join(ids)},
+            params=sm_params,
         )
         if sm.status_code >= 400:
             return []

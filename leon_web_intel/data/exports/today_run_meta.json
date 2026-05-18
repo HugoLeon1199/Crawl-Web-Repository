@@ -1,0 +1,15 @@
+{
+  "run_id": "6f1bc77b-0f8b-4141-9060-7c4a4b1206f1",
+  "argv": [
+    "run_today.py",
+    "--skip-profile",
+    "--date",
+    "today",
+    "--timezone",
+    "Europe/Amsterdam"
+  ],
+  "full_run_command": "python run_today.py --skip-profile --date today --timezone Europe/Amsterdam",
+  "raw_source_lines": 200,
+  "include_apis": false,
+  "apis": "all"
+}

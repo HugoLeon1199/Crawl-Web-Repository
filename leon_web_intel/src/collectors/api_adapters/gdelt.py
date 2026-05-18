@@ -9,7 +9,7 @@ from loguru import logger
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord
 from collectors.gdelt_collector import iter_gdelt_artlist_day, normalize_gdelt_query, url_to_gdelt_source_id
-from settings import CrawlRules
+from settings import CrawlRules, build_api_user_agent
 from utils.today_filter import target_date_range
 
 
@@ -64,6 +64,7 @@ class GdeltAdapter(ApiAdapter):
                 window_end_utc=end_utc,
                 max_records_total=max_records,
                 http_timeout=float(rules.request_timeout_seconds) + 30.0,
+                user_agent=build_api_user_agent(rules),
             ):
                 rec = parse_gdelt_article_dict(art)
                 if rec:

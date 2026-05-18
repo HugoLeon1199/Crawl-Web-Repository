@@ -1,21 +1,21 @@
 # Today API Hub Report
 
 ## Target
-- Calendar date: **2026-05-15**
+- Calendar date: **2026-05-18**
 - Timezone: **Europe/Amsterdam**
-- UTC window: `2026-05-14 22:00:00+00:00` → `2026-05-15 22:00:00+00:00`
+- UTC window: `2026-05-17 22:00:00+00:00` → `2026-05-18 22:00:00+00:00`
 
 ## Record counts by adapter
-- **crossref:** 40
-- **gdelt:** 40
-- **github:** 40
-- **openalex:** 40
-- **pubmed:** 40
-- **world_bank:** 40
+- **gdelt:** 2270
+- **world_bank:** 266
+- **crossref:** 200
+- **openalex:** 102
+- **github:** 100
+- **pubmed:** 100
 
 ## Totals
-- **Total API metadata rows (window):** 240
-- **Full-text extracts (strategy api_trafilatura_extract, window):** 0
+- **Total API metadata rows (window):** 3038
+- **Full-text extracts (strategy api_trafilatura_extract, window):** 355
 
 ## API Hub errors by adapter
 - *(none)*
@@ -23,5 +23,5 @@
 ## Command
 
 ```
-run_api_today.py --regenerate-report
+run_export.py --today-only --date today --timezone Europe/Amsterdam
 ```

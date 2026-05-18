@@ -1,9 +1,9 @@
 # GDELT Today Report
 
 ## Target
-- Calendar date: **2026-05-17**
+- Calendar date: **2026-05-18**
 - Timezone: **Europe/Amsterdam**
-- UTC window: `2026-05-16 22:00:00+00:00` → `2026-05-17 22:00:00+00:00`
+- UTC window: `2026-05-17 22:00:00+00:00` → `2026-05-18 22:00:00+00:00`
 - Query: `(see gdelt run / api_query column in CSV)`
 
 ## Totals

@@ -87,7 +87,8 @@ def build_profile_markdown(db: WebIntelDB) -> str:
         if r.get("captcha_detected"):
             reason_parts.append("captcha_signal")
         reason = ", ".join(reason_parts) or "unspecified"
-        err = (r.get("error_message") or "").replace("\n", " ")[:200]
+        err_raw = r.get("error_message")
+        err = str(err_raw if err_raw is not None and str(err_raw) != "nan" else "").replace("\n", " ")[:200]
         lines.append(f"{r.get('source_id')} | {r.get('domain')} | {reason} | {err}")
     lines.append("")
     lines.append("## Next Steps")

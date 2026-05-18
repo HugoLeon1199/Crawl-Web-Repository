@@ -5,9 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+from loguru import logger
 
 from collectors.api_adapters.base import ApiAdapter, ApiRecord, http_get_with_retry
-from settings import CrawlRules
+from settings import CrawlRules, resolve_contact_email
 from utils.today_filter import resolve_calendar_date
 
 
@@ -72,6 +73,11 @@ class SecEdgarAdapter(ApiAdapter):
     ) -> list[ApiRecord]:
         day = str(resolve_calendar_date(target_date_str, timezone_name))
         cik = (query.strip() if query and query not in ("*", "") and query.isdigit() else "320193").zfill(10)
+        if not resolve_contact_email(rules):
+            logger.warning(
+                "SEC EDGAR fair access requires User-Agent identifying you (email). "
+                "Set contact_email in crawl_rules.yaml or WEB_INTEL_CONTACT_EMAIL — otherwise HTTP 403 is likely."
+            )
         url = f"https://data.sec.gov/submissions/CIK{cik}.json"
         r = http_get_with_retry(client, url)
         if r.status_code >= 400:

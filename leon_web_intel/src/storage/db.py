@@ -782,6 +782,98 @@ class WebIntelDB:
             "distinct_article_sources_today": int(distinct_article_sources or 0),
         }
 
+    def source_intake_snapshot(
+        self,
+        *,
+        target_date_str: str | None,
+        timezone_name: str,
+    ) -> dict[str, Any]:
+        """Per-source counts for the calendar day window: discovered URLs vs extracted articles vs frontier."""
+        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        cal = str(resolve_calendar_date(target_date_str, timezone_name))
+
+        def _df_counts(sql: str) -> dict[str, int]:
+            with self._lock:
+                df = self.conn.execute(sql, [start_utc, end_utc]).fetchdf()
+            if df.empty:
+                return {}
+            out: dict[str, int] = {}
+            for _, r in df.iterrows():
+                raw_sid = r["source_id"]
+                sid = str(raw_sid).strip() if raw_sid is not None else ""
+                if not sid:
+                    sid = "(unknown)"
+                out[sid] = int(r["n"])
+            return out
+
+        discovered_sql = """
+            SELECT source_id, COUNT(*) AS n
+            FROM discovered_urls
+            WHERE discovered_at >= ? AND discovered_at < ?
+            GROUP BY source_id
+        """
+        articles_sql = """
+            SELECT source_id, COUNT(*) AS n
+            FROM articles
+            WHERE extracted_at >= ? AND extracted_at < ?
+            GROUP BY source_id
+        """
+        pending_sql = """
+            SELECT source_id, COUNT(*) AS n
+            FROM crawl_frontier
+            WHERE status IN ('pending', 'crawling')
+              AND last_seen_at >= ? AND last_seen_at < ?
+            GROUP BY source_id
+        """
+        failed_sql = """
+            SELECT source_id, COUNT(*) AS n
+            FROM crawl_frontier
+            WHERE status = 'failed'
+              AND last_seen_at >= ? AND last_seen_at < ?
+            GROUP BY source_id
+        """
+
+        disc = _df_counts(discovered_sql)
+        arts = _df_counts(articles_sql)
+        pend = _df_counts(pending_sql)
+        fail = _df_counts(failed_sql)
+
+        all_ids = sorted(set(disc) | set(arts) | set(pend) | set(fail))
+        rows: list[dict[str, Any]] = []
+        for sid in all_ids:
+            d_n = int(disc.get(sid, 0))
+            a_n = int(arts.get(sid, 0))
+            rows.append(
+                {
+                    "source_id": sid,
+                    "discovered_today": d_n,
+                    "articles_extracted_today": a_n,
+                    "remaining_estimate": max(0, d_n - a_n),
+                    "frontier_pending_today": int(pend.get(sid, 0)),
+                    "frontier_failed_today": int(fail.get(sid, 0)),
+                }
+            )
+        rows.sort(key=lambda r: (-r["articles_extracted_today"], -r["discovered_today"], r["source_id"]))
+
+        with self._lock:
+            prof_total = int(self.conn.execute("SELECT COUNT(*) FROM source_profiles").fetchone()[0] or 0)
+
+        return {
+            "target_calendar_date": cal,
+            "timezone_name": timezone_name,
+            "window_start_utc": start_utc,
+            "window_end_utc": end_utc,
+            "profiled_sources_total": prof_total,
+            "rows": rows,
+            "totals": {
+                "discovered_today": int(sum(disc.values())),
+                "articles_extracted_today": int(sum(arts.values())),
+                "remaining_estimate": max(0, int(sum(disc.values())) - int(sum(arts.values()))),
+                "frontier_pending_today": int(sum(pend.values())),
+                "frontier_failed_today": int(sum(fail.values())),
+            },
+        }
+
     def export_today_articles_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
         import pandas as pd
 
@@ -971,16 +1063,16 @@ class WebIntelDB:
         self.upsert_api_record(row)
 
     def fetch_today_api_records(self, *, target_date_str: str | None, timezone_name: str) -> list[dict[str, Any]]:
-        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        target_cal = str(resolve_calendar_date(target_date_str, timezone_name))
         with self._lock:
             df = self.conn.execute(
                 """
                 SELECT *
                 FROM api_records
-                WHERE collected_at >= ? AND collected_at < ?
+                WHERE target_calendar_date = ? AND timezone_name = ?
                 ORDER BY api_name, url
                 """,
-                [start_utc, end_utc],
+                [target_cal, timezone_name],
             ).fetchdf()
         if df.empty:
             return []
@@ -989,17 +1081,17 @@ class WebIntelDB:
     def fetch_today_api_headlines(
         self, *, target_date_str: str | None, timezone_name: str, limit: int = 50
     ) -> list[dict[str, Any]]:
-        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        target_cal = str(resolve_calendar_date(target_date_str, timezone_name))
         with self._lock:
             df = self.conn.execute(
                 """
                 SELECT api_name, title, url, published_at
                 FROM api_records
-                WHERE collected_at >= ? AND collected_at < ?
+                WHERE target_calendar_date = ? AND timezone_name = ?
                 ORDER BY collected_at DESC
                 LIMIT ?
                 """,
-                [start_utc, end_utc, limit],
+                [target_cal, timezone_name, limit],
             ).fetchdf()
         if df.empty:
             return []
@@ -1029,17 +1121,17 @@ class WebIntelDB:
     def count_api_records_by_adapter(
         self, *, target_date_str: str | None, timezone_name: str
     ) -> dict[str, int]:
-        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        target_cal = str(resolve_calendar_date(target_date_str, timezone_name))
         with self._lock:
             df = self.conn.execute(
                 """
                 SELECT api_name, COUNT(*) AS n
                 FROM api_records
-                WHERE collected_at >= ? AND collected_at < ?
+                WHERE target_calendar_date = ? AND timezone_name = ?
                 GROUP BY api_name
                 ORDER BY api_name
                 """,
-                [start_utc, end_utc],
+                [target_cal, timezone_name],
             ).fetchdf()
         if df.empty:
             return {}
@@ -1111,17 +1203,17 @@ class WebIntelDB:
         return out
 
     def export_today_api_metadata_csv(self, out_path: Path, *, target_date_str: str | None, timezone_name: str) -> None:
-        start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        target_cal = str(resolve_calendar_date(target_date_str, timezone_name))
         with self._lock:
             df = self.conn.execute(
                 """
                 SELECT api_name, source_id, record_type, title, url, published_at, updated_at,
                        language, domain, country, authors_json, discovery_method, content_hash, collected_at
                 FROM api_records
-                WHERE collected_at >= ? AND collected_at < ?
+                WHERE target_calendar_date = ? AND timezone_name = ?
                 ORDER BY api_name, url
                 """,
-                [start_utc, end_utc],
+                [target_cal, timezone_name],
             ).fetchdf()
         out_path.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(out_path, index=False)
@@ -1130,6 +1222,7 @@ class WebIntelDB:
         """Full-text merge for local AI pipelines (do not commit if policy forbids)."""
 
         start_utc, end_utc = target_date_range(target_date_str, timezone_name)
+        target_cal = str(resolve_calendar_date(target_date_str, timezone_name))
         out_path.parent.mkdir(parents=True, exist_ok=True)
         rows_out: list[dict[str, Any]] = []
         with self._lock:
@@ -1147,9 +1240,9 @@ class WebIntelDB:
                 SELECT id, api_name, source_id, record_type, title, url, published_at, language,
                        content, summary, content_hash
                 FROM api_records
-                WHERE collected_at >= ? AND collected_at < ?
+                WHERE target_calendar_date = ? AND timezone_name = ?
                 """,
-                [start_utc, end_utc],
+                [target_cal, timezone_name],
             ).fetchdf()
         for _, r in art_df.iterrows():
             content = r.get("content")

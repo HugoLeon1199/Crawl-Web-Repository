@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 # Upper bound per source to avoid runaway queues while treating 0 as unlimited intent.
-FULL_RUN_URL_CAP_PER_SOURCE = 100_000
+FULL_RUN_URL_CAP_PER_SOURCE = 2_000_000
 
 
 def resolve_max_urls_per_source(n: int) -> int:

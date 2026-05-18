@@ -25,7 +25,8 @@ def url_to_gdelt_source_id(url: str) -> str:
 def normalize_gdelt_query(q: str) -> str:
     s = (q or "").strip()
     if s in ("*", "", '""'):
-        return "*"
+        # GDELT rejects bare '*'; use a broad OR predicate (still lightweight vs OR-heavy mega-queries).
+        return "(climate OR technology OR health OR economy OR politics)"
     return s
 
 
@@ -99,6 +100,16 @@ def fetch_artlist_window(
         text = r.text.strip()
         if not text:
             return []
+        if "timespan is too short" in text.lower():
+            logger.debug(
+                "GDELT ArtList window too narrow {} .. {} — treating as empty",
+                params.get("startdatetime"),
+                params.get("enddatetime"),
+            )
+            return []
+        if "too short or too long" in text.lower():
+            logger.warning("GDELT rejected query length/content — check normalize_gdelt_query")
+            return []
         try:
             data = json.loads(text)
         except json.JSONDecodeError:
@@ -148,6 +159,15 @@ def _bisect_window(
     if len(arts) < MAX_RECORDS:
         return
 
+    span_s = (end - start).total_seconds()
+    if span_s <= 180:
+        logger.warning(
+            "GDELT window {:.0f}s returned {} rows (truncation risk; skip subdivide)",
+            span_s,
+            len(arts),
+        )
+        return
+
     mid = start + (end - start) / 2
     if mid <= start or mid >= end:
         logger.warning(
@@ -170,19 +190,30 @@ def iter_gdelt_artlist_day(
     window_end_utc: datetime,
     max_records_total: int | None,
     http_timeout: float = 90.0,
+    user_agent: str | None = None,
+    tile_step: timedelta = timedelta(hours=1),
+    tile_sleep_seconds: float = 5.0,
 ) -> Iterator[dict[str, Any]]:
     """
-    Walk the UTC interval with 15-minute tiles, subdividing when a tile fills MAX_RECORDS.
+    Walk the UTC interval in ``tile_step`` chunks (default 1h), subdividing when a chunk fills MAX_RECORDS.
+
+    ``tile_sleep_seconds`` pauses between chunks (not after the last) to reduce 429s; set 0–1s for speed at your own risk.
+
+    Larger ``tile_step`` (e.g. 2–4h) means fewer outer requests but each chunk is more likely to hit the 250-record cap,
+    triggering recursive bisection (extra calls; possible truncation if windows cannot shrink further).
 
     ``max_records_total`` None means no cap (beyond practical API limits).
     """
+    if tile_step <= timedelta(0):
+        raise ValueError("tile_step must be positive")
     seen: set[str] = set()
     collected: list[dict[str, Any]] = []
 
-    step = timedelta(minutes=15)
+    step = tile_step
     cur = window_start_utc
+    ua = (user_agent or "").strip() or "LeonWebIntelBot/0.1 (+research; gdelt-doc-api)"
     with httpx.Client(
-        headers={"User-Agent": "LeonWebIntelBot/0.1 (+research; gdelt-doc-api)"},
+        headers={"User-Agent": ua},
         follow_redirects=True,
         timeout=http_timeout,
     ) as client:
@@ -207,6 +238,8 @@ def iter_gdelt_artlist_day(
                 len(collected) - before,
                 len(collected),
             )
+            if tile_sleep_seconds > 0 and nxt < window_end_utc:
+                time.sleep(tile_sleep_seconds)
             cur = nxt
 
     yield from collected

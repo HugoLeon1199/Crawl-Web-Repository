@@ -73,8 +73,9 @@ def discover_rss_urls(
 
     valid: list[str] = []
     tried = 0
+    probe_cap = max(1, rules.profiler_max_rss_http_attempts)
     for cand in candidates:
-        if tried >= rules.max_rss_candidates:
+        if tried >= probe_cap:
             break
         tried += 1
         try:
@@ -83,6 +84,7 @@ def discover_rss_urls(
                 continue
             if validate_feed_body(body, cand):
                 valid.append(cand)
+                break
         except Exception as exc:  # noqa: BLE001
             logger.debug("rss candidate failed {}: {}", cand, exc)
 

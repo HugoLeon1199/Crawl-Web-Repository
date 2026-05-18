@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, NamedTuple
 
 import feedparser
 import scrapy
@@ -15,6 +15,12 @@ from utils.today_filter import (
     resolve_calendar_date,
     target_date_range,
 )
+
+
+class _TodayEntry(NamedTuple):
+    sort_key: float
+    link: str
+    cand_raw: str | None
 
 
 class RssArticleSpider(scrapy.Spider):
@@ -79,9 +85,8 @@ class RssArticleSpider(scrapy.Spider):
         if self.today_only:
             start_utc, end_utc = target_date_range(self.target_date_str, self.timezone_str)
             target_d = resolve_calendar_date(self.target_date_str, self.timezone_str)
+            picked: list[_TodayEntry] = []
             for entry in entries:
-                if self._reserved.get(sid, 0) >= self.max_urls_per_source:
-                    break
                 link = entry.get("link") or entry.get("id")
                 if not link:
                     continue
@@ -117,16 +122,24 @@ class RssArticleSpider(scrapy.Spider):
                 if not include:
                     continue
 
+                sk = cand_dt.timestamp() if cand_dt else float("-inf")
+                picked.append(_TodayEntry(sk, link, cand_raw))
+
+            picked.sort(key=lambda e: e.sort_key, reverse=True)
+            remaining = self.max_urls_per_source - self._reserved.get(sid, 0)
+            if remaining <= 0:
+                return
+            for row in picked[:remaining]:
                 self._reserved[sid] = self._reserved.get(sid, 0) + 1
                 self._sched(1)
                 yield scrapy.Request(
-                    link,
+                    row.link,
                     callback=self.parse_article,
                     errback=self.errback,
                     meta={
                         "source_id": sid,
                         "source_active": active,
-                        "candidate_published_at": cand_raw,
+                        "candidate_published_at": row.cand_raw,
                     },
                     dont_filter=False,
                 )

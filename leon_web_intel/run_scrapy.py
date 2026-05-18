@@ -67,24 +67,26 @@ def main() -> None:
         type=int,
         default=1000,
         metavar="N",
-        help="Safety cap per source in today mode (RSS/HTML/sitemap); 0 = full-run ceiling (~100k)",
+        help="Per-source URL/article attempt budget (today & wide); 0 = full-run ceiling (~2M)",
     )
     args = p.parse_args()
 
-    mu = resolve_max_urls_per_source(args.max_urls_per_source) if args.today_only else args.max_urls_per_source
+    resolved_cap = resolve_max_urls_per_source(args.max_urls_per_source)
+    # Without --today-only, spiders cap RSS/HTML attempts via max_articles_per_source (historically defaulted to 5).
+    max_art_eff = resolved_cap if not args.today_only else args.max_articles_per_source
 
     summary = run_scrapy_engine(
         root=ROOT,
         strategy=args.strategy,
         limit=args.limit,
-        max_articles_per_source=args.max_articles_per_source,
+        max_articles_per_source=max_art_eff,
         db_path=args.db,
         run_id=args.run_id,
         close_spider_timeout=args.close_spider_timeout,
         today_only=bool(args.today_only),
         target_date=args.date,
         timezone_name=args.timezone,
-        max_urls_per_source=int(mu),
+        max_urls_per_source=int(resolved_cap),
     )
 
     print("")
@@ -95,8 +97,10 @@ def main() -> None:
     print(f"Articles inserted: {summary.articles_inserted}")
     print(f"Crawl errors logged: {summary.errors_logged}")
     print(f"Duplicate content hashes skipped: {summary.duplicates_skipped}")
-    if args.today_only:
-        print(f"Today mode: date={args.date!r} timezone={args.timezone!r} max_urls_per_source={mu}")
+    print(
+        f"Per-source budget: today_only={bool(args.today_only)} "
+        f"max_urls_per_source={resolved_cap} effective_max_articles_per_source={max_art_eff}"
+    )
     if args.run_id:
         print(f"Run ID: {args.run_id}")
     print(f"Database: {args.db.resolve()}")

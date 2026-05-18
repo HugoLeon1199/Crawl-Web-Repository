@@ -41,6 +41,8 @@ def build_gdelt_command(
     query: str,
     max_records: int,
     extract_content: bool,
+    tile_hours: float,
+    tile_sleep: float,
 ) -> list[str]:
     cmd = [
         python_executable,
@@ -53,9 +55,15 @@ def build_gdelt_command(
         query,
         "--max-records",
         str(max_records),
+        "--tile-hours",
+        str(tile_hours),
+        "--tile-sleep",
+        str(tile_sleep),
     ]
     if extract_content:
         cmd.append("--extract-content")
+    else:
+        cmd.append("--no-extract-content")
     return cmd
 
 
@@ -85,6 +93,8 @@ def build_api_hub_command(
     ]
     if api_extract_content:
         cmd.append("--extract-content")
+    else:
+        cmd.append("--no-extract-content")
     return cmd
 
 
@@ -102,6 +112,7 @@ def build_today_commands(
     close_spider_timeout: int,
     profile_concurrency: int | None,
     skip_profile: bool,
+    wide_harvest: bool,
 ) -> list[list[str]]:
     commands: list[list[str]] = []
     if not skip_profile:
@@ -128,29 +139,28 @@ def build_today_commands(
         strategy,
         "--limit",
         str(profile_limit_cli),
-        "--today-only",
-        "--date",
-        date_arg,
-        "--timezone",
-        timezone_arg,
-        "--max-urls-per-source",
-        str(max_urls_per_source_resolved),
-        "--close-spider-timeout",
-        str(close_spider_timeout),
-        "--run-id",
-        run_id,
     ]
+    if not wide_harvest:
+        scrapy_cmd.append("--today-only")
+    scrapy_cmd.extend(
+        [
+            "--date",
+            date_arg,
+            "--timezone",
+            timezone_arg,
+            "--max-urls-per-source",
+            str(max_urls_per_source_resolved),
+            "--close-spider-timeout",
+            str(close_spider_timeout),
+            "--run-id",
+            run_id,
+        ]
+    )
     commands.append(scrapy_cmd)
 
-    export_cmd = [
-        python_executable,
-        "run_export.py",
-        "--today-only",
-        "--date",
-        date_arg,
-        "--timezone",
-        timezone_arg,
-    ]
+    export_cmd = [python_executable, "run_export.py", "--date", date_arg, "--timezone", timezone_arg]
+    if not wide_harvest:
+        export_cmd.insert(2, "--today-only")
     commands.append(export_cmd)
     return commands
 
@@ -202,11 +212,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--max-urls-per-source",
         type=int,
-        default=0,
-        help="Per-source URL cap in today mode (0 = full-run ceiling)",
+        default=50,
+        help="Per-source URL/article attempt cap in today mode (default 50 newest-today after filter; 0 = full-run ceiling ~2M)",
     )
     parser.add_argument("--step-timeout-seconds", type=int, default=None)
-    parser.add_argument("--close-spider-timeout", type=int, default=10800)
+    parser.add_argument(
+        "--close-spider-timeout",
+        type=int,
+        default=1800,
+        metavar="SEC",
+        help="Scrapy CLOSESPIDER_TIMEOUT seconds (default 1800 = 30 min wall-clock cap)",
+    )
     parser.add_argument("--force-refresh", action="store_true")
     parser.add_argument("--skip-profile", action="store_true", help="Skip run_profile.py (reuse DuckDB profiles)")
     parser.add_argument(
@@ -216,23 +232,62 @@ def main(argv: list[str] | None = None) -> int:
         metavar="N",
         help="Override YAML profiler concurrency for this run",
     )
-    parser.add_argument("--include-gdelt", action="store_true", help="Run run_gdelt_today.py before profiling")
+    parser.set_defaults(include_gdelt=False, include_apis=False, api_extract_content=True, gdelt_extract_content=True)
+    gdx = parser.add_mutually_exclusive_group()
+    gdx.add_argument(
+        "--include-gdelt",
+        action="store_true",
+        dest="include_gdelt",
+        help="Run run_gdelt_today.py before Scrapy (off by default for faster today runs)",
+    )
+    gdx.add_argument("--skip-gdelt", action="store_false", dest="include_gdelt")
     parser.add_argument("--gdelt-query", default="*")
     parser.add_argument("--gdelt-max-records", type=int, default=0)
-    parser.add_argument("--gdelt-extract-content", action="store_true")
     parser.add_argument(
+        "--gdelt-tile-hours",
+        type=float,
+        default=1.0,
+        metavar="H",
+        help="GDELT UTC tile width (run_gdelt_today --tile-hours)",
+    )
+    parser.add_argument(
+        "--gdelt-tile-sleep",
+        type=float,
+        default=5.0,
+        metavar="SEC",
+        help="Seconds between GDELT tiles (lower = faster, more 429 risk)",
+    )
+    gx = parser.add_mutually_exclusive_group()
+    gx.add_argument("--gdelt-extract-content", action="store_true", dest="gdelt_extract_content")
+    gx.add_argument("--no-gdelt-extract-content", action="store_false", dest="gdelt_extract_content")
+    apix = parser.add_mutually_exclusive_group()
+    apix.add_argument(
         "--include-apis",
         action="store_true",
-        help="Run run_api_today.py (API Hub) before profiling / Scrapy",
+        dest="include_apis",
+        help="Run run_api_today.py (API Hub) before profiling / Scrapy (off by default until hub is stable)",
     )
+    apix.add_argument("--skip-apis", action="store_false", dest="include_apis")
     parser.add_argument("--apis", default="all", help="Passed to run_api_today (--apis)")
     parser.add_argument("--api-query", default="*")
     parser.add_argument("--api-max-records", type=int, default=0)
-    parser.add_argument("--api-extract-content", action="store_true")
+    ax = parser.add_mutually_exclusive_group()
+    ax.add_argument("--api-extract-content", action="store_true", dest="api_extract_content")
+    ax.add_argument("--no-api-extract-content", action="store_false", dest="api_extract_content")
+    parser.add_argument(
+        "--wide-harvest",
+        action="store_true",
+        help="Scrapy without strict calendar-day RSS filter; export skips today-only slice",
+    )
     args = parser.parse_args(argv)
 
     if args.close_spider_timeout <= 0:
         parser.error("--close-spider-timeout must be positive")
+
+    if args.gdelt_tile_hours <= 0:
+        parser.error("--gdelt-tile-hours must be positive")
+    if args.gdelt_tile_sleep < 0:
+        parser.error("--gdelt-tile-sleep must be >= 0")
 
     max_urls_eff = resolve_max_urls_per_source(args.max_urls_per_source)
 
@@ -269,6 +324,8 @@ def main(argv: list[str] | None = None) -> int:
                     "include_gdelt": bool(args.include_gdelt),
                     "gdelt_query": args.gdelt_query,
                     "gdelt_max_records": args.gdelt_max_records,
+                    "gdelt_tile_hours": args.gdelt_tile_hours,
+                    "gdelt_tile_sleep": args.gdelt_tile_sleep,
                     "gdelt_extract_content": bool(args.gdelt_extract_content),
                     "include_apis": bool(args.include_apis),
                     "apis": args.apis,
@@ -276,6 +333,7 @@ def main(argv: list[str] | None = None) -> int:
                     "api_max_records": args.api_max_records,
                     "api_extract_content": bool(args.api_extract_content),
                     "raw_source_lines": raw_source_lines,
+                    "wide_harvest": bool(args.wide_harvest),
                 },
                 sort_keys=True,
             ),
@@ -317,6 +375,8 @@ def main(argv: list[str] | None = None) -> int:
                 query=args.gdelt_query,
                 max_records=args.gdelt_max_records,
                 extract_content=bool(args.gdelt_extract_content),
+                tile_hours=float(args.gdelt_tile_hours),
+                tile_sleep=float(args.gdelt_tile_sleep),
             )
         )
     commands.extend(
@@ -333,6 +393,7 @@ def main(argv: list[str] | None = None) -> int:
             close_spider_timeout=args.close_spider_timeout,
             profile_concurrency=args.profile_concurrency,
             skip_profile=bool(args.skip_profile),
+            wide_harvest=bool(args.wide_harvest),
         )
     )
 

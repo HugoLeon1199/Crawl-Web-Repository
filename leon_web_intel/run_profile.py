@@ -471,8 +471,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-export-csv", action="store_true")
     parser.add_argument("--export-parquet", action="store_true", default=True)
     parser.add_argument("--no-export-parquet", action="store_true")
+    parser.add_argument(
+        "--skip-profiling",
+        action="store_true",
+        help="Skip profile_many; use existing source_profiles in DuckDB (requires --crawl-sample)",
+    )
 
     args = parser.parse_args(argv)
+
+    if args.skip_profiling:
+        if not args.crawl_sample:
+            parser.error("--skip-profiling requires --crawl-sample")
+        if args.profile_only:
+            parser.error("--skip-profiling cannot be combined with --profile-only")
 
     ensure_dirs()
     log_path = ROOT / "logs" / "app.log"
@@ -519,7 +530,7 @@ def main(argv: list[str] | None = None) -> int:
         if not args.profile_only and not args.crawl_sample:
             args.profile_only = True
 
-        if args.profile_only or args.crawl_sample:
+        if (args.profile_only or args.crawl_sample) and not args.skip_profiling:
             profiler = SourceProfiler(rules=rules, known_apis=known, http=http, db=db, raw_store=raw_store)
             profiler.profile_many(
                 [n.input_url for n in uniq],

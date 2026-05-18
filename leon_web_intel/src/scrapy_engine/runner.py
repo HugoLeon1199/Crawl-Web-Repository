@@ -76,7 +76,7 @@ def run_scrapy_engine(
         closespider_timeout=close_spider_timeout,
         today_only=today_only,
         target_date=target_date,
-            timezone=timezone_name,
+        timezone_name=timezone_name,
     )
 
     configure_logging(settings={"LOG_LEVEL": settings.get("LOG_LEVEL")})

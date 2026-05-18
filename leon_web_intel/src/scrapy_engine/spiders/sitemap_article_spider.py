@@ -176,6 +176,77 @@ class SitemapArticleSpider(scrapy.Spider):
             start_utc, end_utc = target_date_range(self.target_date_str, self.timezone_str)
             target_d = resolve_calendar_date(self.target_date_str, self.timezone_str)
 
+        if self.today_only and start_utc is not None and end_utc is not None and target_d is not None:
+            nested_meta: list[dict[str, Any]] = []
+            leaf_rows: list[tuple[float, str, str | None]] = []
+
+            for loc, lastmod in pairs:
+                parsed = urlparse(loc)
+                child_host = parsed.netloc.lower()
+                if domain_host and child_host and child_host != domain_host:
+                    continue
+
+                if self._looks_like_sitemap_url(loc) and nested < self.max_sitemap_nested:
+                    self._sched(1)
+                    nested_meta.append(
+                        {
+                            "loc": loc,
+                            "depth": nested + 1,
+                            "domain_host": domain_host or child_host,
+                        }
+                    )
+                    continue
+
+                if not loc.startswith("http"):
+                    continue
+
+                cand_raw = lastmod
+                lm_dt = parse_any_datetime(lastmod) if lastmod else None
+
+                include = False
+                if lm_dt and is_datetime_in_range(lm_dt, start_utc, end_utc):
+                    include = True
+                elif lm_dt is None and is_url_likely_today(loc, target_d):
+                    include = True
+                elif lm_dt and not is_datetime_in_range(lm_dt, start_utc, end_utc):
+                    include = False
+                elif is_url_likely_today(loc, target_d):
+                    include = True
+                if not include:
+                    continue
+
+                sort_ts = lm_dt.timestamp() if lm_dt else float("-inf")
+                leaf_rows.append((sort_ts, loc, cand_raw))
+
+            for nm in nested_meta:
+                yield scrapy.Request(
+                    nm["loc"],
+                    callback=self.parse_sitemap,
+                    errback=self.errback,
+                    meta={
+                        "source_id": sid,
+                        "source_active": active,
+                        "nested_depth": nm["depth"],
+                        "domain_host": nm["domain_host"],
+                    },
+                    dont_filter=False,
+                )
+
+            leaf_rows.sort(key=lambda r: r[0], reverse=True)
+            cap_left = self._cap_for_source(sid) - self._reserved.get(sid, 0)
+            for _, loc, cand_raw in leaf_rows[: max(0, cap_left)]:
+                self._reserved[sid] = self._reserved.get(sid, 0) + 1
+                self._sched(1)
+                meta = {"source_id": sid, "source_active": active, "candidate_published_at": cand_raw}
+                yield scrapy.Request(
+                    loc,
+                    callback=self.parse_article,
+                    errback=self.errback,
+                    meta=meta,
+                    dont_filter=False,
+                )
+            return
+
         for loc, lastmod in pairs:
             if self._reserved.get(sid, 0) >= self._cap_for_source(sid):
                 break
@@ -205,19 +276,6 @@ class SitemapArticleSpider(scrapy.Spider):
 
             cand_raw = lastmod
             lm_dt = parse_any_datetime(lastmod) if lastmod else None
-
-            if self.today_only and start_utc and end_utc and target_d:
-                include = False
-                if lm_dt and is_datetime_in_range(lm_dt, start_utc, end_utc):
-                    include = True
-                elif lm_dt is None and is_url_likely_today(loc, target_d):
-                    include = True
-                elif lm_dt and not is_datetime_in_range(lm_dt, start_utc, end_utc):
-                    include = False
-                elif is_url_likely_today(loc, target_d):
-                    include = True
-                if not include:
-                    continue
 
             self._reserved[sid] = self._reserved.get(sid, 0) + 1
             self._sched(1)
